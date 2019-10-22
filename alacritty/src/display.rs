@@ -31,10 +31,11 @@ use alacritty_terminal::event::{Event, OnResize};
 use alacritty_terminal::index::Line;
 use alacritty_terminal::message_bar::MessageBuffer;
 use alacritty_terminal::meter::Meter;
-use alacritty_terminal::renderer::rects::{RenderLines, RenderRect};
+use alacritty_terminal::renderer::rects::{RenderRect};
 use alacritty_terminal::renderer::{self, GlyphCache, QuadRenderer};
 use alacritty_terminal::term::color::Rgb;
-use alacritty_terminal::term::{RenderableCell, SizeInfo, Term};
+use alacritty_terminal::term::{cell::Flags, SizeInfo, Term};
+use alacritty_terminal::text_run::TextRun;
 
 use crate::config::Config;
 use crate::event::{FontResize, Resize};
@@ -244,7 +245,7 @@ impl Display {
         config: &Config,
     ) -> Result<(GlyphCache, f32, f32), Error> {
         let font = config.font.clone();
-        let rasterizer = font::Rasterizer::new(dpr as f32, config.font.use_thin_strokes())?;
+        let rasterizer = font::Rasterizer::new(dpr as f32, config.font.use_thin_strokes(), config.font.ligatures())?;
 
         // Initialize glyph cache
         let glyph_cache = {
@@ -362,7 +363,7 @@ impl Display {
         message_buffer: &MessageBuffer,
         config: &Config,
     ) {
-        let grid_cells: Vec<RenderableCell> = terminal.renderable_cells(config).collect();
+        let grid_text_runs: Vec<TextRun> = terminal.text_runs(config).collect();
         let visual_bell_intensity = terminal.visual_bell.intensity();
         let background_color = terminal.background_color();
         let metrics = self.glyph_cache.font_metrics();
@@ -380,7 +381,7 @@ impl Display {
             api.clear(background_color);
         });
 
-        let mut lines = RenderLines::new();
+        let mut rects: Vec<RenderRect> = Vec::new();
 
         // Draw grid
         {
@@ -388,17 +389,22 @@ impl Display {
 
             self.renderer.with_api(&config, &size_info, |mut api| {
                 // Iterate over all non-empty cells in the grid
-                for cell in grid_cells {
+                for text_run in grid_text_runs {
                     // Update underline/strikeout
-                    lines.update(cell);
+                    if text_run.flags.contains(Flags::UNDERLINE) {
+                        let underline_metrics = (metrics.descent, metrics.underline_position, metrics.underline_thickness);
+                        rects.push(RenderRect::from_text_run(&text_run, underline_metrics, &size_info));
+                    }
+                    if text_run.flags.contains(Flags::STRIKEOUT) {
+                        let strikeout_metrics = (metrics.descent, metrics.strikeout_position, metrics.strikeout_thickness);
+                        rects.push(RenderRect::from_text_run(&text_run, strikeout_metrics, &size_info));
+                    }
 
                     // Draw the cell
-                    api.render_cell(cell, glyph_cache);
+                    api.render_text_run(text_run, glyph_cache);
                 }
             });
         }
-
-        let mut rects = lines.into_rects(&metrics, &size_info);
 
         if let Some(message) = message_buffer.message() {
             let text = message.text(&size_info);

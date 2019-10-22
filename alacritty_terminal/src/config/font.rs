@@ -5,7 +5,6 @@ use log::error;
 use serde::de::Visitor;
 use serde::{Deserialize, Deserializer};
 
-#[cfg(target_os = "macos")]
 use crate::config::DefaultTrueBool;
 use crate::config::{failure_default, Delta, LOG_TARGET_CONFIG};
 
@@ -49,6 +48,11 @@ pub struct Font {
     #[cfg(target_os = "macos")]
     #[serde(deserialize_with = "failure_default")]
     use_thin_strokes: DefaultTrueBool,
+
+    /// Toggles rendering of font ligatures
+    #[cfg(not(any(target_os = "macos", windows)))]
+    #[serde(deserialize_with = "failure_default")]
+    ligatures: DefaultTrueBool,
 }
 
 impl Default for Font {
@@ -61,6 +65,8 @@ impl Default for Font {
             bold_italic: Default::default(),
             glyph_offset: Default::default(),
             offset: Default::default(),
+            #[cfg(not(any(target_os = "macos", windows)))]
+            ligatures: Default::default(),
             #[cfg(target_os = "macos")]
             use_thin_strokes: Default::default(),
         }
@@ -100,6 +106,16 @@ impl Font {
 
     #[cfg(not(target_os = "macos"))]
     pub fn use_thin_strokes(&self) -> bool {
+        false
+    }
+
+    #[cfg(not(any(target_os = "macos", windows)))]
+    pub fn ligatures(&self) -> bool {
+        self.ligatures.0
+    }
+
+    #[cfg(any(target_os = "macos", windows))]
+    pub fn ligatures(&self) -> bool {
         false
     }
 }

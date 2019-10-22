@@ -42,6 +42,9 @@ extern crate libc;
 #[macro_use]
 extern crate foreign_types;
 
+#[cfg(not(any(target_os = "macos", windows)))]
+extern crate harfbuzz_rs;
+
 #[cfg_attr(not(windows), macro_use)]
 extern crate log;
 
@@ -66,6 +69,9 @@ pub use crate::directwrite::{DirectWriteRasterizer as Rasterizer, Error};
 mod darwin;
 #[cfg(target_os = "macos")]
 pub use darwin::*;
+
+/// Placeholder glyph key that represents a blank gylph
+pub const PLACEHOLDER_GLYPH: KeyType = KeyType::Placeholder;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct FontDesc {
@@ -136,37 +142,42 @@ impl FontKey {
     }
 }
 
-#[derive(Debug, Copy, Clone, Eq)]
+/// Captures possible outcomes of shaping, if shaping succeeded it will return a `GlyphIndex`.
+/// If shaping failed or did not occur, `Fallback` will be returned.
+#[derive(Debug, Copy, Clone, Eq, PartialEq, Hash)]
+pub enum KeyType {
+    /// A valid glyph index from Font face to be rasterized to a glyph
+    GlyphIndex(u32),
+    /// A character that has not been converted to an index before rasterizing
+    Char(char),
+    /// Placeholder glyph useful when we need a glyph but it shouldn't ever render as anything
+    /// (cursors, wide_char_spacers, etc.)
+    Placeholder,
+}
+
+impl Default for KeyType {
+    fn default() -> Self {
+        PLACEHOLDER_GLYPH
+    }
+}
+
+impl From<u32> for KeyType {
+    fn from(val: u32) -> Self {
+        KeyType::GlyphIndex(val)
+    }
+}
+
+impl From<char> for KeyType {
+    fn from(val: char) -> Self {
+        KeyType::Char(val)
+    }
+}
+
+#[derive(Debug, Copy, Clone, Eq, Hash, PartialEq)]
 pub struct GlyphKey {
-    pub c: char,
+    pub id: KeyType,
     pub font_key: FontKey,
     pub size: Size,
-}
-
-impl Hash for GlyphKey {
-    fn hash<H: Hasher>(&self, state: &mut H) {
-        unsafe {
-            // This transmute is fine:
-            //
-            // - If GlyphKey ever becomes a different size, this will fail to compile
-            // - Result is being used for hashing and has no fields (it's a u64)
-            ::std::mem::transmute::<GlyphKey, u64>(*self)
-        }
-        .hash(state);
-    }
-}
-
-impl PartialEq for GlyphKey {
-    fn eq(&self, other: &Self) -> bool {
-        unsafe {
-            // This transmute is fine:
-            //
-            // - If GlyphKey ever becomes a different size, this will fail to compile
-            // - Result is being used for equality checking and has no fields (it's a u64)
-            let other = ::std::mem::transmute::<GlyphKey, u64>(*other);
-            ::std::mem::transmute::<GlyphKey, u64>(*self).eq(&other)
-        }
-    }
 }
 
 /// Font size stored as integer
@@ -213,20 +224,14 @@ impl From<f32> for Size {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Default)]
 pub struct RasterizedGlyph {
-    pub c: char,
+    pub c: KeyType,
     pub width: i32,
     pub height: i32,
     pub top: i32,
     pub left: i32,
     pub buf: Vec<u8>,
-}
-
-impl Default for RasterizedGlyph {
-    fn default() -> RasterizedGlyph {
-        RasterizedGlyph { c: ' ', width: 0, height: 0, top: 0, left: 0, buf: Vec::new() }
-    }
 }
 
 struct BufDebugger<'a>(&'a [u8]);
@@ -265,8 +270,11 @@ pub trait Rasterize {
     /// Errors occurring in Rasterize methods
     type Err: ::std::error::Error + Send + Sync + 'static;
 
-    /// Create a new Rasterizer
-    fn new(device_pixel_ratio: f32, use_thin_strokes: bool) -> Result<Self, Self::Err>
+    fn new(
+        device_pixel_ratio: f32,
+        use_thin_strokes: bool,
+        ligatures: bool,
+    ) -> Result<Self, Self::Err>
     where
         Self: Sized;
 
@@ -281,4 +289,11 @@ pub trait Rasterize {
 
     /// Update the Rasterizer's DPI factor
     fn update_dpr(&mut self, device_pixel_ratio: f32);
+}
+
+/// Extends the Rasterizer with Harfbuzz specific functionality.
+#[cfg(not(any(target_os = "macos", windows)))]
+pub trait HbFtExt {
+    /// Shape the provided text into a set of glyphs.
+    fn shape(&mut self, text: &str, font_key: FontKey) -> harfbuzz_rs::GlyphBuffer;
 }

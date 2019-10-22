@@ -37,6 +37,8 @@ use crate::index::{self, Column, Contains, IndexRange, Line, Linear, Point};
 use crate::selection::{self, Selection, SelectionRange, Span};
 use crate::term::cell::{Cell, Flags, LineLength};
 use crate::term::color::Rgb;
+use crate::text_run::{TextRun, TextRunIter};
+
 #[cfg(windows)]
 use crate::tty;
 use crate::url::Url;
@@ -315,11 +317,18 @@ impl RenderableCell {
         }
     }
 
+    pub fn is_cursor(&self) -> bool {
+        match &self.inner {
+            RenderableCellContent::Cursor(_) => true,
+            _ => false,
+        }
+    }
+
     fn compute_fg_rgb<C>(
-        config: &Config<C>,
-        colors: &color::List,
-        fg: Color,
-        flags: cell::Flags,
+        config: &Config<C>, 
+        colors: &color::List, 
+        fg: Color, 
+        flags: cell::Flags
     ) -> Rgb {
         match fg {
             Color::Spec(rgb) => rgb,
@@ -1064,7 +1073,7 @@ impl<T> Term<T> {
     /// A renderable cell is any cell which has content other than the default
     /// background color.  Cells with an alternate background color are
     /// considered renderable as are cells with any text content.
-    pub fn renderable_cells<'b, C>(&'b self, config: &'b Config<C>) -> RenderableCellsIter<'_, C> {
+    fn renderable_cells<'b, C>( &'b self, config: &'b Config<C>) -> RenderableCellsIter<'_, C> {
         let selection = self.grid.selection.as_ref().and_then(|s| s.to_span(self));
 
         let cursor = if self.is_focused || !config.cursor.unfocused_hollow() {
@@ -1074,6 +1083,25 @@ impl<T> Term<T> {
         };
 
         RenderableCellsIter::new(&self, config, selection, cursor)
+    }
+
+    /// Iterate over the text runs in the terminal
+    ///
+    /// A text run is a continuous line of cells that all share the same rendering properties
+    /// (background color, foreground color, etc.).
+    pub fn text_runs<'b, C>(
+        &'b self,
+        config: &'b Config<C>,
+    ) -> impl Iterator<Item = TextRun> + 'b {
+        // Logic for WIDE_CHAR is handled internally by TextRun
+        // So we no longer need WIDE_CHAR_SPACER at this point.
+        let filtered_cells: std::iter::Filter<
+            RenderableCellsIter<'b, C>,
+            fn(&RenderableCell) -> bool,
+        > = self
+            .renderable_cells(config)
+            .filter(|cell| !cell.flags.contains(Flags::WIDE_CHAR_SPACER));
+        TextRunIter::new(filtered_cells)
     }
 
     /// Resize terminal to new dimensions

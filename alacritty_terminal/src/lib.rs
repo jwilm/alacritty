@@ -37,6 +37,7 @@ pub mod renderer;
 pub mod selection;
 pub mod sync;
 pub mod term;
+pub mod text_run;
 pub mod tty;
 pub mod url;
 pub mod util;
