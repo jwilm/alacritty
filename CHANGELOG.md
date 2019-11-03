@@ -29,6 +29,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Escape sequence to save and restore window title from stack
 - Alternate scroll escape sequence (`CSI ? 1007 h` / `CSI ? 1007 l`)
 - Print name of launch command if Alacritty failed to execute it
+- Track and report damage to compatible compositors (primarily Wayland)
 
 ### Changed
 

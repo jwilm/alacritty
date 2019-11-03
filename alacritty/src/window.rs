@@ -29,7 +29,7 @@ use glutin::platform::unix::{EventLoopWindowTargetExtUnix, WindowBuilderExtUnix,
 #[cfg(not(target_os = "macos"))]
 use glutin::window::Icon;
 use glutin::window::{CursorIcon, Fullscreen, Window as GlutinWindow, WindowBuilder, WindowId};
-use glutin::{self, ContextBuilder, PossiblyCurrent, WindowedContext};
+use glutin::{self, ContextBuilder, PossiblyCurrent, Rect, WindowedContext};
 #[cfg(not(target_os = "macos"))]
 use image::ImageFormat;
 #[cfg(not(any(target_os = "macos", windows)))]
@@ -382,6 +382,14 @@ impl Window {
 
     pub fn swap_buffers(&self) {
         self.windowed_context.swap_buffers().expect("swap buffers");
+    }
+
+    pub fn swap_buffers_with_damage(&self, rects: &[Rect]) {
+        self.windowed_context.swap_buffers_with_damage(rects).expect("swap buffers with damage");
+    }
+
+    pub fn swap_buffers_with_damage_supported(&self) -> bool {
+        self.windowed_context.swap_buffers_with_damage_supported()
     }
 
     pub fn resize(&self, size: PhysicalSize) {

@@ -215,6 +215,9 @@ pub trait Handler {
     /// Linefeed
     fn linefeed(&mut self) {}
 
+    /// Linefeed and carriage return
+    fn linefeed_carriage_return(&mut self) {}
+
     /// Ring the bell
     ///
     /// Hopefully this is never implemented

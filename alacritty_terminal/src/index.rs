@@ -123,6 +123,12 @@ impl Linear {
     pub fn from_point(columns: Column, point: Point<usize>) -> Self {
         Linear(point.line * columns.0 + point.col.0)
     }
+
+    pub fn into_point(self, columns: Column) -> Point<Line> {
+        let line = Line(self.0 / columns.0);
+        let col = Column(self.0 % columns.0);
+        Point { col, line }
+    }
 }
 
 impl fmt::Display for Linear {

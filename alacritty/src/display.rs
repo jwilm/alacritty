@@ -14,13 +14,15 @@
 
 //! The display subsystem including window management, font rasterization, and
 //! GPU drawing.
-use std::cmp::max;
+use std::cmp::{max, min};
 use std::f64;
 use std::fmt;
 use std::time::Instant;
 
 use glutin::dpi::{PhysicalPosition, PhysicalSize};
+use glutin::event::{Event as GlutinEvent};
 use glutin::event_loop::EventLoop;
+use glutin::Rect;
 use log::{debug, info};
 use parking_lot::MutexGuard;
 
@@ -122,6 +124,9 @@ pub struct Display {
     renderer: QuadRenderer,
     glyph_cache: GlyphCache,
     meter: Meter,
+
+    damage_supported: bool,
+    fully_damaged: bool,
 }
 
 impl Display {
@@ -228,6 +233,8 @@ impl Display {
             _ => (),
         }
 
+        let damage_supported = window.swap_buffers_with_damage_supported();
+
         Ok(Display {
             window,
             renderer,
@@ -235,6 +242,8 @@ impl Display {
             meter: Meter::new(),
             size_info,
             font_size: config.font.size,
+            damage_supported,
+            fully_damaged: false,
         })
     }
 
@@ -348,6 +357,7 @@ impl Display {
             PhysicalSize::new(f64::from(self.size_info.width), f64::from(self.size_info.height));
         self.renderer.resize(&self.size_info);
         self.window.resize(physical);
+        self.fully_damaged = true;
     }
 
     /// Draw the screen
@@ -357,16 +367,87 @@ impl Display {
     /// This call may block if vsync is enabled
     pub fn draw<T>(
         &mut self,
-        terminal: MutexGuard<'_, Term<T>>,
+        mut terminal: MutexGuard<'_, Term<T>>,
         message_buffer: &MessageBuffer,
         config: &Config,
+        event_queue: &mut Vec<GlutinEvent<Event>>,
     ) {
         let grid_cells: Vec<RenderableCell> = terminal.renderable_cells(config).collect();
+        let visual_bell_animating = terminal.visual_bell.animating();
         let visual_bell_intensity = terminal.visual_bell.intensity();
         let background_color = terminal.background_color();
         let metrics = self.glyph_cache.font_metrics();
         let glyph_cache = &mut self.glyph_cache;
         let size_info = self.size_info;
+        let cols = size_info.cols();
+
+        // Request immediate re-draw if visual bell animation is not finished
+        if visual_bell_animating {
+            event_queue.push(GlutinEvent::UserEvent(Event::Wakeup));
+        }
+
+        // Check grid damage
+        let damage: Option<Vec<Rect>> = if self.damage_supported {
+            let (width, height, cell_width, cell_height, padding_x, padding_y) =
+                size_info.into_u32();
+
+            if self.fully_damaged || visual_bell_animating || config.render_timer() {
+                // We need to fully damage, so let's clear damage and stop here
+                terminal.reset_damage();
+                self.fully_damaged = false;
+                None
+            } else {
+                // Fetch and clear damage
+                let term_damage = terminal.get_damage();
+                if term_damage.damage_all {
+                    terminal.reset_damage();
+                    None
+                } else {
+                    let mut rects = Vec::with_capacity(term_damage.lines.len());
+                    for line in term_damage.lines.iter_mut() {
+                        if line.is_undamaged() {
+                            continue;
+                        }
+
+                        // Make end coordinates be lower right corner instead of upper
+                        // left. Also add one more to end_x to compensate for the
+                        // possibility of the end position being a double width
+                        // character.
+                        let (x, y, end_x, end_y) = (
+                            line.left.0 as u32,
+                            line.line.0 as u32,
+                            (line.right.0 + 2) as u32,
+                            (line.line.0 + 1) as u32,
+                        );
+
+                        // Then, convert the grid to a rect in gl coordinates
+                        let rect = Rect {
+                            x: x * cell_width + padding_x,
+                            y: height - end_y * cell_height - padding_y,
+                            width: (end_x - x) * cell_width,
+                            height: (end_y - y) * cell_height,
+                        };
+
+                        // And finally, add half a cell of horizontal, quarter of a
+                        // cell of vertical padding to cover overdraw.
+                        let x = rect.x.saturating_sub(cell_width / 2);
+                        let y = rect.y.saturating_sub(cell_height / 4);
+                        rects.push(Rect {
+                            x,
+                            y,
+                            width: min(width - x, rect.width + cell_width),
+                            height: min(height - y, rect.height + cell_height / 2),
+                        });
+                        line.reset(cols);
+                    }
+                    term_damage.damage_all = false;
+                    terminal.damage_cursor();
+                    Some(rects)
+                }
+            }
+        } else {
+            None
+        };
 
         // Update IME position
         #[cfg(not(windows))]
@@ -453,8 +534,11 @@ impl Display {
                 api.render_string(&timing[..], size_info.lines() - 2, glyph_cache, Some(color));
             });
         }
-
-        self.window.swap_buffers();
+        if let Some(damage) = damage {
+            self.window.swap_buffers_with_damage(&damage);
+        } else {
+            self.window.swap_buffers();
+        }
     }
 }
 

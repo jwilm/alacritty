@@ -428,13 +428,8 @@ impl<N: Notify> Processor<N> {
             if terminal.dirty {
                 terminal.dirty = false;
 
-                // Request immediate re-draw if visual bell animation is not finished yet
-                if !terminal.visual_bell.completed() {
-                    event_queue.push(GlutinEvent::UserEvent(Event::Wakeup));
-                }
-
                 // Redraw screen
-                self.display.draw(terminal, &self.message_buffer, &self.config);
+                self.display.draw(terminal, &self.message_buffer, &self.config, &mut event_queue);
             }
         });
 
