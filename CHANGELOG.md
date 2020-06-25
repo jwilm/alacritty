@@ -40,6 +40,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Set IUTF8 termios flag for improved UTF8 input support
 - Dragging files into terminal now adds a space after each path
 - Default binding replacement conditions
+- Escape Windows shell command line arguments
 
 ### Fixed
 
