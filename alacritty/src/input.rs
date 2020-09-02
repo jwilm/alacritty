@@ -764,7 +764,7 @@ impl<'a, T: EventListener, A: ActionContext<T>> Processor<'a, T, A> {
         }
 
         // Skip normal mouse events if the message bar has been clicked.
-        if self.message_close_at_cursor() && state == ElementState::Pressed {
+        if self.message_close_at_cursor() && state == ElementState::Released {
             self.ctx.clear_selection();
             self.ctx.pop_message();
 
