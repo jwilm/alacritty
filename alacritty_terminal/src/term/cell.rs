@@ -55,7 +55,6 @@ impl GridCell for Cell {
         (self.c == ' ' || self.c == '\t')
             && self.extra[0] == ' '
             && self.bg == Color::Named(NamedColor::Background)
-            && self.fg == Color::Named(NamedColor::Foreground)
             && !self.flags.intersects(
                 Flags::INVERSE
                     | Flags::UNDERLINE
@@ -131,7 +130,7 @@ impl Cell {
     #[inline]
     pub fn reset(&mut self, template: &Cell) {
         // memcpy template to self.
-        *self = Cell { c: template.c, bg: template.bg, ..Cell::default() };
+        *self = Cell { c: template.c, bg: template.bg, fg: template.fg, ..Cell::default() };
     }
 
     #[inline]
