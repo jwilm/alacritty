@@ -65,6 +65,9 @@ use crate::display::Display;
 use crate::event::{Event, EventProxy, Processor};
 use crate::message_bar::MessageBuffer;
 
+#[macro_use]
+extern crate memoffset;
+
 fn main() {
     #[cfg(windows)]
     panic::attach_handler();

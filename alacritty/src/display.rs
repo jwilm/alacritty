@@ -39,7 +39,7 @@ use crate::event::{Mouse, SearchState};
 use crate::message_bar::{MessageBuffer, MessageType};
 use crate::meter::Meter;
 use crate::renderer::rects::{RenderLines, RenderRect};
-use crate::renderer::{self, GlyphCache, QuadRenderer};
+use crate::renderer::{self, GlyphCache, RenderContext, Renderer};
 use crate::url::{Url, Urls};
 use crate::window::{self, Window};
 
@@ -157,10 +157,13 @@ pub struct Display {
     #[cfg(all(feature = "wayland", not(any(target_os = "macos", windows))))]
     pub wayland_event_queue: Option<EventQueue>,
 
+    #[cfg(feature = "dump-raw-render-timings")]
+    timing_dump_file: std::fs::File,
+
     #[cfg(not(any(target_os = "macos", windows)))]
     pub is_x11: bool,
 
-    renderer: QuadRenderer,
+    renderer: Renderer,
     glyph_cache: GlyphCache,
     meter: Meter,
 }
@@ -173,7 +176,7 @@ impl Display {
 
         // Guess the target window dimensions.
         let metrics = GlyphCache::static_metrics(config.ui_config.font.clone(), estimated_dpr)?;
-        let (cell_width, cell_height) = compute_cell_size(config, &metrics);
+        let (cell_width, cell_height) = GlyphCache::compute_cell_size(config, &metrics);
 
         // Guess the target window size if the user has specified the number of lines/columns.
         let dimensions = config.ui_config.window.dimensions();
@@ -207,7 +210,7 @@ impl Display {
         info!("Device pixel ratio: {}", window.dpr);
 
         // Create renderer.
-        let mut renderer = QuadRenderer::new()?;
+        let mut renderer = Renderer::new()?;
 
         let (glyph_cache, cell_width, cell_height) =
             Self::new_glyph_cache(window.dpr, &mut renderer, config)?;
@@ -245,9 +248,7 @@ impl Display {
 
         // Clear screen.
         let background_color = config.colors.primary.background;
-        renderer.with_api(&config.ui_config, config.cursor, &size_info, |api| {
-            api.clear(background_color);
-        });
+        renderer.clear(background_color, config.ui_config.background_opacity());
 
         // Set subpixel anti-aliasing.
         #[cfg(target_os = "macos")]
@@ -263,9 +264,7 @@ impl Display {
         #[cfg(not(any(target_os = "macos", windows)))]
         if is_x11 {
             window.swap_buffers();
-            renderer.with_api(&config.ui_config, config.cursor, &size_info, |api| {
-                api.finish();
-            });
+            renderer.finish();
         }
 
         window.set_visible(true);
@@ -300,12 +299,14 @@ impl Display {
             is_x11,
             #[cfg(all(feature = "wayland", not(any(target_os = "macos", windows))))]
             wayland_event_queue,
+            #[cfg(feature = "dump-raw-render-timings")]
+            timing_dump_file: std::fs::File::create("timing.dump").unwrap(),
         })
     }
 
     fn new_glyph_cache(
         dpr: f64,
-        renderer: &mut QuadRenderer,
+        renderer: &mut Renderer,
         config: &Config,
     ) -> Result<(GlyphCache, f32, f32), Error> {
         let font = config.ui_config.font.clone();
@@ -316,8 +317,8 @@ impl Display {
             info!("Initializing glyph cache...");
             let init_start = Instant::now();
 
-            let cache =
-                renderer.with_loader(|mut api| GlyphCache::new(rasterizer, &font, &mut api))?;
+            let cache = renderer
+                .with_loader(|mut api| GlyphCache::new(rasterizer, config, &font, &mut api))?;
 
             let stop = init_start.elapsed();
             let stop_f = stop.as_secs() as f64 + f64::from(stop.subsec_nanos()) / 1_000_000_000f64;
@@ -329,7 +330,7 @@ impl Display {
         // Need font metrics to resize the window properly. This suggests to me the
         // font metrics should be computed before creating the window in the first
         // place so that a resize is not needed.
-        let (cw, ch) = compute_cell_size(config, &glyph_cache.font_metrics());
+        let (cw, ch) = GlyphCache::compute_cell_size(config, &glyph_cache.font_metrics());
 
         Ok((glyph_cache, cw, ch))
     }
@@ -342,18 +343,18 @@ impl Display {
         let dpr = self.window.dpr;
 
         self.renderer.with_loader(|mut api| {
-            let _ = cache.update_font_size(font, dpr, &mut api);
+            let _ = cache.update_font_size(config, font, dpr, &mut api);
         });
 
         // Compute new cell sizes.
-        compute_cell_size(config, &self.glyph_cache.font_metrics())
+        GlyphCache::compute_cell_size(config, &self.glyph_cache.font_metrics())
     }
 
     /// Clear glyph cache.
-    fn clear_glyph_cache(&mut self) {
+    fn clear_glyph_cache(&mut self, config: &Config) {
         let cache = &mut self.glyph_cache;
         self.renderer.with_loader(|mut api| {
-            cache.clear_glyph_cache(&mut api);
+            cache.clear_glyph_cache(config, &mut api);
         });
     }
 
@@ -380,7 +381,7 @@ impl Display {
 
             info!("Cell size: {} x {}", cell_width, cell_height);
         } else if update_pending.cursor_dirty() {
-            self.clear_glyph_cache();
+            self.clear_glyph_cache(config);
         }
 
         let (mut width, mut height) = (self.size_info.width(), self.size_info.height());
@@ -458,9 +459,12 @@ impl Display {
         // Drop terminal as early as possible to free lock.
         drop(terminal);
 
-        self.renderer.with_api(&config.ui_config, config.cursor, &size_info, |api| {
-            api.clear(background_color);
-        });
+        #[cfg(feature = "dump-raw-render-timings")]
+        let start = Instant::now();
+
+        self.renderer.clear(background_color, config.ui_config.background_opacity());
+
+        let mut render_context = self.renderer.begin(&config.ui_config, config.cursor, &size_info);
 
         let mut lines = RenderLines::new();
         let mut urls = Urls::new();
@@ -469,20 +473,80 @@ impl Display {
         {
             let _sampler = self.meter.sampler();
 
-            self.renderer.with_api(&config.ui_config, config.cursor, &size_info, |mut api| {
-                // Iterate over all non-empty cells in the grid.
-                for cell in grid_cells {
-                    // Update URL underlines.
-                    urls.update(size_info.cols(), cell);
+            // Iterate over all non-empty cells in the grid.
+            for cell in grid_cells {
+                // Update URL underlines.
+                urls.update(size_info.cols(), cell);
 
-                    // Update underline/strikeout.
-                    lines.update(cell);
+                // Update underline/strikeout.
+                lines.update(cell);
 
-                    // Draw the cell.
-                    api.render_cell(cell, glyph_cache);
-                }
-            });
+                // Draw the cell.
+                render_context.update_cell(cell, glyph_cache);
+            }
         }
+
+        if let Some(message) = message_buffer.message() {
+            let search_offset = if search_state.regex().is_some() { 1 } else { 0 };
+            let text = message.text(&size_info);
+
+            let start_line = size_info.screen_lines() + search_offset;
+
+            let color = match message.ty() {
+                MessageType::Error => config.colors.normal().red,
+                MessageType::Warning => config.colors.normal().yellow,
+            };
+
+            // Relay messages to the user.
+            let fg = config.colors.primary.background;
+            for (i, message_text) in text.iter().enumerate() {
+                render_context.render_string(
+                    glyph_cache,
+                    start_line + i,
+                    &message_text,
+                    fg,
+                    Some(color),
+                );
+            }
+        }
+
+        Self::draw_render_timer(
+            &mut self.glyph_cache,
+            &mut render_context,
+            config,
+            &size_info,
+            &self.meter,
+        );
+
+        // Handle search and IME positioning.
+        let ime_position = match search_state.regex() {
+            Some(regex) => {
+                let search_label = match search_state.direction() {
+                    Direction::Right => FORWARD_SEARCH_LABEL,
+                    Direction::Left => BACKWARD_SEARCH_LABEL,
+                };
+
+                let search_text = Self::format_search(&size_info, regex, search_label);
+
+                // Render the search bar.
+                Self::draw_search(
+                    &mut self.glyph_cache,
+                    &mut render_context,
+                    config,
+                    &size_info,
+                    &search_text,
+                );
+
+                // Compute IME position.
+                Point::new(size_info.screen_lines() + 1, Column(search_text.chars().count() - 1))
+            },
+            None => cursor_point,
+        };
+
+        // Update IME position.
+        self.window.update_ime_position(ime_position, &self.size_info);
+
+        render_context.draw_text();
 
         let mut rects = lines.rects(&metrics, &size_info);
 
@@ -524,80 +588,37 @@ impl Display {
             rects.push(visual_bell_rect);
         }
 
-        if let Some(message) = message_buffer.message() {
-            let search_offset = if search_state.regex().is_some() { 1 } else { 0 };
-            let text = message.text(&size_info);
+        // Draw rectangles.
+        render_context.draw_rects(rects);
 
-            // Create a new rectangle for the background.
-            let start_line = size_info.screen_lines() + search_offset;
-            let y = size_info.cell_height().mul_add(start_line.0 as f32, size_info.padding_y());
+        drop(render_context);
 
-            let color = match message.ty() {
-                MessageType::Error => config.colors.normal().red,
-                MessageType::Warning => config.colors.normal().yellow,
-            };
+        #[cfg(feature = "dump-raw-render-timings")]
+        {
+            self.renderer.finish();
 
-            let message_bar_rect =
-                RenderRect::new(0., y, size_info.width(), size_info.height() - y, color, 1.);
-
-            // Push message_bar in the end, so it'll be above all other content.
-            rects.push(message_bar_rect);
-
-            // Draw rectangles.
-            self.renderer.draw_rects(&size_info, rects);
-
-            // Relay messages to the user.
-            let fg = config.colors.primary.background;
-            for (i, message_text) in text.iter().enumerate() {
-                self.renderer.with_api(&config.ui_config, config.cursor, &size_info, |mut api| {
-                    api.render_string(glyph_cache, start_line + i, &message_text, fg, None);
-                });
-            }
-        } else {
-            // Draw rectangles.
-            self.renderer.draw_rects(&size_info, rects);
+            let dt = (Instant::now() - start).as_micros() as u32;
+            std::io::Write::write(&mut self.timing_dump_file, &dt.to_ne_bytes()).unwrap();
         }
-
-        self.draw_render_timer(config, &size_info);
-
-        // Handle search and IME positioning.
-        let ime_position = match search_state.regex() {
-            Some(regex) => {
-                let search_label = match search_state.direction() {
-                    Direction::Right => FORWARD_SEARCH_LABEL,
-                    Direction::Left => BACKWARD_SEARCH_LABEL,
-                };
-
-                let search_text = Self::format_search(&size_info, regex, search_label);
-
-                // Render the search bar.
-                self.draw_search(config, &size_info, &search_text);
-
-                // Compute IME position.
-                Point::new(size_info.screen_lines() + 1, Column(search_text.chars().count() - 1))
-            },
-            None => cursor_point,
-        };
-
-        // Update IME position.
-        self.window.update_ime_position(ime_position, &self.size_info);
 
         // Frame event should be requested before swaping buffers, since it requires surface
         // `commit`, which is done by swap buffers under the hood.
         #[cfg(all(feature = "wayland", not(any(target_os = "macos", windows))))]
         self.request_frame(&self.window);
 
-        self.window.swap_buffers();
-
-        #[cfg(all(feature = "x11", not(any(target_os = "macos", windows))))]
+        #[cfg(all(
+            feature = "x11",
+            not(any(target_os = "macos", windows)),
+            not(feature = "dump-raw-render-timings")
+        ))]
         if self.is_x11 {
             // On X11 `swap_buffers` does not block for vsync. However the next OpenGl command
             // will block to synchronize (this is `glClear` in Alacritty), which causes a
             // permanent one frame delay.
-            self.renderer.with_api(&config.ui_config, config.cursor, &size_info, |api| {
-                api.finish();
-            });
+            self.renderer.finish();
         }
+
+        self.window.swap_buffers();
     }
 
     /// Format search regex to account for the cursor and fullwidth characters.
@@ -632,8 +653,13 @@ impl Display {
     }
 
     /// Draw current search regex.
-    fn draw_search(&mut self, config: &Config, size_info: &SizeInfo, text: &str) {
-        let glyph_cache = &mut self.glyph_cache;
+    fn draw_search(
+        glyph_cache: &mut GlyphCache,
+        render_context: &mut RenderContext<'_>,
+        config: &Config,
+        size_info: &SizeInfo,
+        text: &str,
+    ) {
         let num_cols = size_info.cols().0;
 
         // Assure text length is at least num_cols.
@@ -641,25 +667,32 @@ impl Display {
 
         let fg = config.colors.search_bar_foreground();
         let bg = config.colors.search_bar_background();
-        self.renderer.with_api(&config.ui_config, config.cursor, &size_info, |mut api| {
-            api.render_string(glyph_cache, size_info.screen_lines(), &text, fg, Some(bg));
-        });
+        render_context.render_string(glyph_cache, size_info.screen_lines(), &text, fg, Some(bg));
     }
 
     /// Draw render timer.
-    fn draw_render_timer(&mut self, config: &Config, size_info: &SizeInfo) {
+    fn draw_render_timer(
+        glyph_cache: &mut GlyphCache,
+        render_context: &mut RenderContext<'_>,
+        config: &Config,
+        size_info: &SizeInfo,
+        meter: &Meter,
+    ) {
         if !config.ui_config.debug.render_timer {
             return;
         }
-        let glyph_cache = &mut self.glyph_cache;
 
-        let timing = format!("{:.3} usec", self.meter.average());
+        let timing = format!("{:.3} usec", meter.average());
         let fg = config.colors.primary.background;
         let bg = config.colors.normal().red;
 
-        self.renderer.with_api(&config.ui_config, config.cursor, &size_info, |mut api| {
-            api.render_string(glyph_cache, size_info.screen_lines() - 2, &timing[..], fg, Some(bg));
-        });
+        render_context.render_string(
+            glyph_cache,
+            size_info.screen_lines() - 2,
+            &timing[..],
+            fg,
+            Some(bg),
+        );
     }
 
     /// Requst a new frame for a window on Wayland.
@@ -681,19 +714,6 @@ impl Display {
             should_draw.store(true, Ordering::Relaxed);
         });
     }
-}
-
-/// Calculate the cell dimensions based on font metrics.
-///
-/// This will return a tuple of the cell width and height.
-#[inline]
-fn compute_cell_size(config: &Config, metrics: &crossfont::Metrics) -> (f32, f32) {
-    let offset_x = f64::from(config.ui_config.font.offset.x);
-    let offset_y = f64::from(config.ui_config.font.offset.y);
-    (
-        (metrics.average_advance + offset_x).floor().max(1.) as f32,
-        (metrics.line_height + offset_y).floor().max(1.) as f32,
-    )
 }
 
 /// Calculate the size of the window given padding, terminal dimensions and cell size.

@@ -29,6 +29,7 @@ urlocator = "0.1.3"
 copypasta = { version = "0.7.0", default-features = false }
 libc = "0.2"
 unicode-width = "0.1"
+memoffset = "0.5"
 
 [build-dependencies]
 gl_generator = "0.14.0"
@@ -62,5 +63,6 @@ wayland = ["copypasta/wayland", "glutin/wayland", "wayland-client"]
 winpty = ["alacritty_terminal/winpty"]
 # Enabling this feature makes shaders automatically reload when changed
 live-shader-reload = []
+dump-raw-render-timings = []
 nightly = []
 bench = []
