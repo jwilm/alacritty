@@ -10,14 +10,18 @@ env:
 
 jobs:
   macos:
-    runs-on: macos-latest
+    runs-on: macos-11.0
 
     steps:
       - uses: actions/checkout@v2
+      - name: Install ARM target
+        run: rustup update && rustup target add aarch64-apple-darwin
       - name: Test
         run: cargo test --release
-      - name: Make App
-        run: make dmg
+      - name: Test ARM
+        run: cargo test --release --target=aarch64-apple-darwin
+      - name: Make DMG
+        run: make dmg-universal
       - name: Upload Application
         run: |
           mv ./target/release/osx/Alacritty.dmg ./Alacritty-${GITHUB_REF##*/}.dmg

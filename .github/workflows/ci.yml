@@ -25,3 +25,11 @@ jobs:
         run: |
           rustup default 1.43.1
           cargo test
+  check-macos-arm:
+    runs-on: macos-11.0
+    steps:
+      - uses: actions/checkout@v2
+      - name: Install target
+        run: rustup update && rustup target add aarch64-apple-darwin
+      - name: Check build
+        run: cargo check --target=aarch64-apple-darwin

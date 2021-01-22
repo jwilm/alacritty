@@ -26,15 +26,21 @@ vpath $(DMG_NAME) $(APP_DIR)
 
 all: help
 
-help: ## Prints help for targets with comments
+help: ## Print this help message
 	@grep -E '^[a-zA-Z._-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | awk 'BEGIN {FS = ":.*?## "}; {printf "\033[36m%-30s\033[0m %s\n", $$1, $$2}'
 
-binary: | $(TARGET) ## Build release binary with cargo
-$(TARGET):
+binary: $(TAGET)-native ## Build a release binary
+binary-universal: $(TAGET)-universal ## Build a universal release binary
+$(TARGET)-native:
 	MACOSX_DEPLOYMENT_TARGET="10.11" cargo build --release
+$(TARGET)-universal:
+	MACOSX_DEPLOYMENT_TARGET="10.11" cargo build --release --target=x86_64-apple-darwin
+	MACOSX_DEPLOYMENT_TARGET="10.11" cargo build --release --target=aarch64-apple-darwin
+	@lipo target/{x86_64,aarch64}-apple-darwin/release/$(TARGET) -create -output $(APP_BINARY)
 
-app: | $(APP_NAME) ## Clone Alacritty.app template and mount binary
-$(APP_NAME): $(TARGET)
+app: $(APP_NAME)-native ## Create an Alacritty.app
+app-universal: $(APP_NAME)-universal ## Create a universal Alacritty.app
+$(APP_NAME)-%: $(TARGET)-%
 	@mkdir -p $(APP_BINARY_DIR)
 	@mkdir -p $(APP_EXTRAS_DIR)
 	@mkdir -p $(APP_COMPLETIONS_DIR)
@@ -44,10 +50,11 @@ $(APP_NAME): $(TARGET)
 	@cp -fp $(APP_BINARY) $(APP_BINARY_DIR)
 	@cp -fp $(COMPLETIONS) $(APP_COMPLETIONS_DIR)
 	@touch -r "$(APP_BINARY)" "$(APP_DIR)/$(APP_NAME)"
-	@echo "Created '$@' in '$(APP_DIR)'"
+	@echo "Created '$(APP_NAME)' in '$(APP_DIR)'"
 
-dmg: | $(DMG_NAME) ## Pack Alacritty.app into .dmg
-$(DMG_NAME): $(APP_NAME)
+dmg: $(DMG_NAME)-native ## Create an Alacritty.dmg
+dmg-universal: $(DMG_NAME)-universal ## Create a universal Alacritty.dmg
+$(DMG_NAME)-%: $(APP_NAME)-%
 	@echo "Packing disk image..."
 	@ln -sf /Applications $(DMG_DIR)/Applications
 	@hdiutil create $(DMG_DIR)/$(DMG_NAME) \
@@ -55,12 +62,14 @@ $(DMG_NAME): $(APP_NAME)
 		-fs HFS+ \
 		-srcfolder $(APP_DIR) \
 		-ov -format UDZO
-	@echo "Packed '$@' in '$(APP_DIR)'"
+	@echo "Packed '$(APP_NAME)' in '$(APP_DIR)'"
 
-install: $(DMG_NAME) ## Mount disk image
+install: $(INSTALL)-native ## Mount disk image
+install-universal: $(INSTALL)-native ## Mount universal disk image
+$(INSTALL)-%: $(DMG_NAME)-%
 	@open $(DMG_DIR)/$(DMG_NAME)
 
-.PHONY: app binary clean dmg install $(TARGET)
+.PHONY: app binary clean dmg install $(TARGET) $(TARGET)-universal
 
-clean: ## Remove all artifacts
-	-rm -rf $(APP_DIR)
+clean: ## Remove all build artifacts
+	@cargo clean

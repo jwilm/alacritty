@@ -7,6 +7,11 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ## 0.8.0-dev
 
+### Packaging
+
+- Updated shell completions
+- Added ARM executable to prebuilt macOS binaries
+
 ### Added
 
 - IME composition preview not appearing on Windows
@@ -14,10 +19,6 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 ### Fixed
 
 - Crash due to assertion failure on 32-bit architectures
-
-### Packaging
-
-- Updated shell completions
 
 ## 0.7.1
 

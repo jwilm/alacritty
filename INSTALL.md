@@ -248,6 +248,16 @@ make app
 cp -r target/release/osx/Alacritty.app /Applications/
 ```
 
+#### Universal Binary
+
+The following will build an executable that runs on both x86 and ARM macos
+architectures:
+
+```sh
+rustup target add x86_64-apple-darwin aarch64-apple-darwin
+make app-universal
+```
+
 ## Post Build
 
 There are some extra things you might want to set up after installing Alacritty.
