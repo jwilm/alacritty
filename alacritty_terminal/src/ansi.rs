@@ -807,6 +807,8 @@ pub enum Attr {
     Foreground(Color),
     /// Set indexed background color.
     Background(Color),
+    /// Set underline color.
+    UnderlineColor(Option<Color>),
 }
 
 /// Identifiers which can be assigned to a graphic character set.
@@ -1383,6 +1385,18 @@ fn attrs_from_sgr_parameters(params: &mut ParamsIter<'_>) -> Vec<Option<Attr>> {
                 parse_sgr_color(&mut iter).map(Attr::Background)
             },
             [49] => Some(Attr::Background(Color::Named(NamedColor::Background))),
+            [58] => {
+                let mut iter = params.map(|param| param[0]);
+                parse_sgr_color(&mut iter).map(|color| Attr::UnderlineColor(Some(color)))
+            },
+            [58, params @ ..] => {
+                let rgb_start = if params.len() > 4 { 2 } else { 1 };
+                let rgb_iter = params[rgb_start..].iter().copied();
+                let mut iter = iter::once(params[0]).chain(rgb_iter);
+
+                parse_sgr_color(&mut iter).map(|color| Attr::UnderlineColor(Some(color)))
+            },
+            [59] => Some(Attr::UnderlineColor(None)),
             [90] => Some(Attr::Foreground(Color::Named(NamedColor::BrightBlack))),
             [91] => Some(Attr::Foreground(Color::Named(NamedColor::BrightRed))),
             [92] => Some(Attr::Foreground(Color::Named(NamedColor::BrightGreen))),

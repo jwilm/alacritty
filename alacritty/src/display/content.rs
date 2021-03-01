@@ -170,6 +170,7 @@ pub struct RenderableCell {
     pub fg: Rgb,
     pub bg: Rgb,
     pub bg_alpha: f32,
+    pub underline_color: Rgb,
     pub flags: Flags,
     pub is_match: bool,
 }
@@ -222,13 +223,23 @@ impl RenderableCell {
             is_match = true;
         }
 
+        let (zerowidth, underline_color) = if let Some(extra) = cell.extra() {
+            (Some(extra.zerowidth.clone()), extra.underline_color)
+        } else {
+            (None, None)
+        };
+
+        let underline_rgb = underline_color
+            .map_or(fg_rgb, |color| Self::compute_fg_rgb(content, color, cell.flags));
+
         RenderableCell {
             character: cell.c,
-            zerowidth: cell.zerowidth().map(|zerowidth| zerowidth.to_vec()),
+            zerowidth,
             point: cell.point,
             fg: fg_rgb,
             bg: bg_rgb,
             bg_alpha,
+            underline_color: underline_rgb,
             flags: cell.flags,
             is_match,
         }

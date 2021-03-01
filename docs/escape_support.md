@@ -65,7 +65,8 @@ brevity.
 | `CSI l`    | PARTIAL     | See `CSI h` for supported modes                   |
 | `CSI ? l`  | PARTIAL     | See `CSI ? h` for supported modes                 |
 | `CSI M`    | IMPLEMENTED |                                                   |
-| `CSI m`    | PARTIAL     | Only singular straight underlines are supported   |
+| `CSI m`    | PARTIAL     | Only straight underlines are supported            |
+|            | IMPLEMENTED | Underline color is supported                      |
 | `CSI n`    | IMPLEMENTED |                                                   |
 | `CSI P`    | IMPLEMENTED |                                                   |
 | `CSI SP q` | IMPLEMENTED |                                                   |

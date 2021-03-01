@@ -13,6 +13,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 ### Added
 
+- Underline color escape sequence (`CSI 58 : 2 : Ps : Ps : Ps m`/`CSI 58 : 5 : Ps m`)
 - IME composition preview not appearing on Windows
 - Synchronized terminal updates using `DCS = 1 s ST`/`DCS = 2 s ST`
 

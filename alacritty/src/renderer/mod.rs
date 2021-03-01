@@ -846,6 +846,7 @@ impl<'a> RenderApi<'a> {
                 bg_alpha: 1.0,
                 fg,
                 bg,
+                underline_color: fg,
                 is_match: false,
             })
             .collect::<Vec<_>>();

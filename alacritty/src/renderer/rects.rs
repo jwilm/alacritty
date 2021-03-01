@@ -174,9 +174,18 @@ impl RenderLines {
             end.column += 1;
         }
 
+        // Underline and double underline (and possible future underline styles)
+        // are colored according to `underline_color`. Other lines, like strikethrough
+        // follow the foreground color.
+        let color = if flag.contains(Flags::UNDERLINE) || flag.contains(Flags::DOUBLE_UNDERLINE) {
+            cell.underline_color
+        } else {
+            cell.fg
+        };
+
         // Check if there's an active line.
         if let Some(line) = self.inner.get_mut(&flag).and_then(|lines| lines.last_mut()) {
-            if cell.fg == line.color
+            if color == line.color
                 && cell.point.column == line.end.column + 1
                 && cell.point.line == line.end.line
             {
@@ -187,7 +196,7 @@ impl RenderLines {
         }
 
         // Start new line if there currently is none.
-        let line = RenderLine { start: cell.point, end, color: cell.fg };
+        let line = RenderLine { start: cell.point, end, color };
         match self.inner.get_mut(&flag) {
             Some(lines) => lines.push(line),
             None => {

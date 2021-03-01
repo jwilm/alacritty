@@ -205,6 +205,7 @@ mod tests {
                 point: Point::new(Line(0), Column(i)),
                 fg: Default::default(),
                 bg: Default::default(),
+                underline_color: Default::default(),
                 bg_alpha: 0.,
                 flags: Flags::empty(),
                 is_match: false,

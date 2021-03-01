@@ -51,8 +51,9 @@ impl ResetDiscriminant<Color> for Cell {
 /// allocation required ahead of time for every cell, with some additional overhead when the extra
 /// storage is actually required.
 #[derive(Serialize, Deserialize, Default, Debug, Clone, Eq, PartialEq)]
-struct CellExtra {
-    zerowidth: Vec<char>,
+pub struct CellExtra {
+    pub zerowidth: Vec<char>,
+    pub underline_color: Option<Color>,
 }
 
 /// Content and attributes of a single cell in the terminal grid.
@@ -63,7 +64,7 @@ pub struct Cell {
     pub bg: Color,
     pub flags: Flags,
     #[serde(default)]
-    extra: Option<Box<CellExtra>>,
+    pub extra: Option<Box<CellExtra>>,
 }
 
 impl Default for Cell {
@@ -80,16 +81,30 @@ impl Default for Cell {
 }
 
 impl Cell {
-    /// Zerowidth characters stored in this cell.
-    #[inline]
-    pub fn zerowidth(&self) -> Option<&[char]> {
-        self.extra.as_ref().map(|extra| extra.zerowidth.as_slice())
-    }
-
     /// Write a new zerowidth character to this cell.
     #[inline]
     pub fn push_zerowidth(&mut self, c: char) {
         self.extra.get_or_insert_with(Default::default).zerowidth.push(c);
+    }
+
+    /// Set the underline color for this cell.
+    #[inline]
+    pub fn set_underline_color(&mut self, color: Color) {
+        self.extra.get_or_insert_with(Default::default).underline_color = Some(color);
+    }
+
+    /// Unset the underline color for this cell.
+    #[inline]
+    pub fn unset_underline_color(&mut self) {
+        if let Some(extra) = &mut self.extra {
+            extra.underline_color = None
+        }
+    }
+
+    /// Get dynamically allocated cell storage
+    #[inline]
+    pub fn extra(&self) -> Option<&CellExtra> {
+        self.extra.as_deref()
     }
 
     /// Free all dynamically allocated cell storage.

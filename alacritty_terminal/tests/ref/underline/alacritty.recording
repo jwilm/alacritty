@@ -1,13 +1,15 @@
-[undeadleech@undeadlap underline]$ [K[undeadleech@undeadlap underline]$ echo -e "\e[4mUNDERLINED\e[0m"
-[4mUNDERLINED[0m
-[undeadleech@undeadlap underline]$ echo -e "\e[4:1mUNDERLINED\e[4:0m"
-[4:1mUNDERLINED[4:0m
-[undeadleech@undeadlap underline]$ echo -e "\e[4:2mUNDERLINED\e[24m"
-[4:2mUNDERLINED[24m
-[undeadleech@undeadlap underline]$ echo -e "\e[4:3mUNDERLINED\e[21m";mUNDERLINED\e[21m"2mUNDERLINED\e[21m"1mUNDERLINED\e[21m"[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[C[1Pm"[1Pm"0m"
-[4:3;21mUNDERLINED[0m
-[undeadleech@undeadlap underline]$ echo -e "\e[4;4:2mUNDERLINED\e[0m"
-[4;4:2mUNDERLINED[0m
-[undeadleech@undeadlap underline]$ echo -e "\e[4;4:2mUNDERLINED\e[0m":;4:2mUNDERLINED\e[0m"1;4:2mUNDERLINED\e[0m"[C[C[C[1P;4:2mUNDERLINED\e[0m"2;4:2mUNDERLINED\e[0m"[C[C[C[C[1PmUNDERLINED\e[0m"1mUNDERLINED\e[0m"
-[4:2;4:1mUNDERLINED[0m
-[undeadleech@undeadlap underline]$ 
+[?2004h$ [K$ echo -e "\e[4mUNDERLINED\e[0m"
+[?2004l[4mUNDERLINED[0m
+[?2004h$ echo -e "\e[4:1mUNDERLINED\e[4:0m"
+[?2004l[4:1mUNDERLINED[4:0m
+[?2004h$ echo -e "\e[4:2mUNDERLINED\e[4:[K[K24m"
+[?2004l[4:2mUNDERLINED[24m
+[?2004h$ echo -e "\e[4:3mUNDERLINED\e[0m"
+[?2004l[4:3mUNDERLINED[0m
+[?2004h$ echo -e ":[K\e[][K4;4:2mUNDERLINED\e[0m"
+[?2004l[4;4:2mUNDERLINED[0m
+[?2004h$ echo -e "\e[4:2;4:1mUNDERLINED\e[0m"
+[?2004l[4:2;4:1mUNDERLINED[0m
+[?2004h$ echo -e "\e[58:5:2;38:5:3mNO\e[4mUND\e[58:2:[K$ echo -e "\e[58:5:2;38:5:3mNO\e[4mUND\e[58:2:[K$ echo -e "\e[58:5:2;38:5:3mNO\e[4mUND\e[58:2:[K$ echo -e "\e[58:5:2;38:5:3mNO\e[4mUND\e[58:2:[K$ echo -e "\e[58:5:2;38:5:3mNO\e[4mUND\e[58:2:[K$ echo -e "\e[58:5:2;38:5:3mNO\e[4mUND\e[58:2:[K$ echo -e "\e[58:5:2;38:5:3mNO\e[4mUND\e[58:2:100:20:238mERL[K$ echo -e "\e[58:5:2;38:5:3mNO\e[4mUND\e[58:2:100:20:238mERL[K$ echo -e "\e[58:5:2;38:5:3mNO\e[4mUND\e[58:2:100:20:238mERLI\e[4[K59mNE\e[0m"
+[?2004l[58:5:2;38:5:3mNO[4mUND[58:2:100:20:238mERLI[59mNE[0m
+[?2004h$ 
