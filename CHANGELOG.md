@@ -17,6 +17,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - Synchronized terminal updates using `DCS = 1 s ST`/`DCS = 2 s ST`
 - Regex terminal hints ([see features.md](./docs/features.md#hints))
 - macOS keybinding (cmd+alt+H) hiding all windows other than Alacritty
+- Config field `reflow` to disable text reflow on resize
 
 ### Changed
 

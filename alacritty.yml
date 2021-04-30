@@ -93,6 +93,9 @@
   # and `light`. Set this to `None` to use the default theme variant.
   #gtk_theme_variant: None
 
+# Reflow terminal content on resize.
+#reflow: true
+
 #scrolling:
   # Maximum number of lines in the scrollback buffer.
   # Specifying '0' will disable scrolling.

@@ -269,25 +269,12 @@ pub struct Term<T> {
     /// Information about cell dimensions.
     cell_width: usize,
     cell_height: usize,
+
+    /// Reflow the grid content on resize.
+    reflow: bool,
 }
 
 impl<T> Term<T> {
-    #[inline]
-    pub fn scroll_display(&mut self, scroll: Scroll)
-    where
-        T: EventListener,
-    {
-        self.grid.scroll_display(scroll);
-        self.event_proxy.send_event(Event::MouseCursorDirty);
-
-        // Clamp vi mode cursor to the viewport.
-        let viewport_start = -(self.grid.display_offset() as i32);
-        let viewport_end = viewport_start + self.bottommost_line().0;
-        let vi_cursor_line = &mut self.vi_mode_cursor.point.line.0;
-        *vi_cursor_line = min(viewport_end, max(viewport_start, *vi_cursor_line));
-        self.vi_mode_recompute_selection();
-    }
-
     pub fn new<C>(config: &Config<C>, size: SizeInfo, event_proxy: T) -> Term<T> {
         let num_cols = size.columns;
         let num_lines = size.screen_lines;
@@ -320,7 +307,24 @@ impl<T> Term<T> {
             selection: None,
             cell_width: size.cell_width as usize,
             cell_height: size.cell_height as usize,
+            reflow: config.reflow,
         }
+    }
+
+    #[inline]
+    pub fn scroll_display(&mut self, scroll: Scroll)
+    where
+        T: EventListener,
+    {
+        self.grid.scroll_display(scroll);
+        self.event_proxy.send_event(Event::MouseCursorDirty);
+
+        // Clamp vi mode cursor to the viewport.
+        let viewport_start = -(self.grid.display_offset() as i32);
+        let viewport_end = viewport_start + self.bottommost_line().0;
+        let vi_cursor_line = &mut self.vi_mode_cursor.point.line.0;
+        *vi_cursor_line = min(viewport_end, max(viewport_start, *vi_cursor_line));
+        self.vi_mode_recompute_selection();
     }
 
     pub fn update_config<C>(&mut self, config: &Config<C>)
@@ -330,6 +334,7 @@ impl<T> Term<T> {
         self.semantic_escape_chars = config.selection.semantic_escape_chars.to_owned();
         self.default_cursor_style = config.cursor.style();
         self.vi_mode_cursor_style = config.cursor.vi_mode_style();
+        self.reflow = config.reflow;
 
         let title_event = match &self.title {
             Some(title) => Event::Title(title.clone()),
@@ -507,8 +512,8 @@ impl<T> Term<T> {
         }
 
         let is_alt = self.mode.contains(TermMode::ALT_SCREEN);
-        self.grid.resize(!is_alt, num_lines, num_cols);
-        self.inactive_grid.resize(is_alt, num_lines, num_cols);
+        self.grid.resize(!is_alt && self.reflow, num_lines, num_cols);
+        self.inactive_grid.resize(is_alt && self.reflow, num_lines, num_cols);
 
         // Clamp vi cursor to viewport.
         let vi_point = self.vi_mode_cursor.point;

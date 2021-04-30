@@ -18,7 +18,7 @@ const MIN_BLINK_INTERVAL: u64 = 10;
 pub type MockConfig = Config<HashMap<String, serde_yaml::Value>>;
 
 /// Top-level config type.
-#[derive(ConfigDeserialize, Debug, PartialEq, Default)]
+#[derive(ConfigDeserialize, Debug, PartialEq)]
 pub struct Config<T> {
     /// TERM env variable.
     pub env: HashMap<String, String>,
@@ -37,6 +37,9 @@ pub struct Config<T> {
     /// Shell startup directory.
     pub working_directory: Option<PathBuf>,
 
+    /// Reflow terminal content on resize.
+    pub reflow: bool,
+
     /// Additional configuration options not directly required by the terminal.
     #[config(flatten)]
     pub ui_config: T,
@@ -44,6 +47,22 @@ pub struct Config<T> {
     /// Remain open after child process exits.
     #[config(skip)]
     pub hold: bool,
+}
+
+impl<T: Default> Default for Config<T> {
+    fn default() -> Self {
+        Self {
+            reflow: true,
+            env: Default::default(),
+            selection: Default::default(),
+            shell: Default::default(),
+            scrolling: Default::default(),
+            cursor: Default::default(),
+            working_directory: Default::default(),
+            ui_config: Default::default(),
+            hold: Default::default(),
+        }
+    }
 }
 
 #[derive(ConfigDeserialize, Clone, Debug, PartialEq, Eq)]
