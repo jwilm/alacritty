@@ -65,6 +65,6 @@ void main() {
         TexCoords = uvOffset + position * uvSize;
     }
 
-    bg = vec4(backgroundColor.rgb / 255.0, backgroundColor.a);
+    bg = backgroundColor / 255.0;
     fg = vec4(textColor.rgb / 255.0, textColor.a);
 }

@@ -4,7 +4,7 @@ use serde::{Deserialize, Deserializer};
 use alacritty_config_derive::ConfigDeserialize;
 use alacritty_terminal::term::color::{CellRgb, Rgb};
 
-#[derive(ConfigDeserialize, Clone, Debug, Default, PartialEq, Eq)]
+#[derive(ConfigDeserialize, Clone, Debug, PartialEq, Eq)]
 pub struct Colors {
     pub primary: PrimaryColors,
     pub cursor: InvertedCellColors,
@@ -17,6 +17,7 @@ pub struct Colors {
     pub search: SearchColors,
     pub line_indicator: LineIndicatorColors,
     pub hints: HintColors,
+    pub opaque_background_colors: bool,
 }
 
 impl Colors {
@@ -26,6 +27,25 @@ impl Colors {
 
     pub fn search_bar_background(&self) -> Rgb {
         self.search.bar.background.unwrap_or(self.primary.foreground)
+    }
+}
+
+impl Default for Colors {
+    fn default() -> Self {
+        Self {
+            primary: Default::default(),
+            cursor: Default::default(),
+            vi_mode_cursor: Default::default(),
+            selection: Default::default(),
+            normal: Default::default(),
+            bright: Default::default(),
+            dim: Default::default(),
+            indexed_colors: Default::default(),
+            search: Default::default(),
+            line_indicator: Default::default(),
+            hints: Default::default(),
+            opaque_background_colors: true,
+        }
     }
 }
 

@@ -203,7 +203,7 @@ impl RenderableCell {
             mem::swap(&mut fg, &mut bg);
             1.0
         } else {
-            Self::compute_bg_alpha(cell.bg)
+            Self::compute_bg_alpha(content, cell.bg)
         };
 
         let is_selected = content.terminal_content.selection.map_or(false, |selection| {
@@ -350,11 +350,13 @@ impl RenderableCell {
     /// using the named input color, rather than checking the RGB of the background after its color
     /// is computed.
     #[inline]
-    fn compute_bg_alpha(bg: Color) -> f32 {
+    fn compute_bg_alpha(content: &mut RenderableContent<'_>, bg: Color) -> f32 {
         if bg == Color::Named(NamedColor::Background) {
             0.
-        } else {
+        } else if content.config.ui_config.colors.opaque_background_colors {
             1.
+        } else {
+            content.config.ui_config.background_opacity()
         }
     }
 }

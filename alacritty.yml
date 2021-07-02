@@ -312,6 +312,13 @@
   #
   #indexed_colors: []
 
+  # Opaque backgrounds with transparency enabled
+  #
+  # Whether or not `background_opacity` applies to all backgrounds or only to the
+  # default background. When set to `false` all cells will be transparent
+  # regardless of their background color.
+  #opaque_background_colors: true
+
 # Bell
 #
 # The bell is rung every time the BEL control character is received.
@@ -458,7 +465,7 @@
   # Each hint must have a `regex` and either an `action` or a `command` field.
   # The fields `mouse`, `binding` and `post_processing` are optional.
   #
-  # The fields `command`, `binding.key`, `binding.mods`, `binding.mode` and 
+  # The fields `command`, `binding.key`, `binding.mods`, `binding.mode` and
   # `mouse.mods` accept the same values as they do in the `key_bindings` section.
   #
   # The `mouse.enabled` field controls if the hint should be underlined while

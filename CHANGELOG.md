@@ -11,6 +11,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 
 - Support for `ipfs`/`ipns` URLs
 - Mode field for regex hint bindings
+- Option `colors.opaque_background_colors` to allow applying opacity to all background colors
 
 ### Fixed
 
