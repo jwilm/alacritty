@@ -69,7 +69,8 @@ pub struct UiConfig {
     mouse_bindings: MouseBindings,
 
     /// Background opacity from 0.0 to 1.0.
-    background_opacity: Percentage,
+    #[config(deprecated = "use window.background_opacity instead")]
+    background_opacity: Option<Percentage>,
 }
 
 impl Default for UiConfig {
@@ -116,7 +117,7 @@ impl UiConfig {
 
     #[inline]
     pub fn background_opacity(&self) -> f32 {
-        self.background_opacity.as_f32()
+        self.background_opacity.unwrap_or(self.window.background_opacity).as_f32()
     }
 
     #[inline]

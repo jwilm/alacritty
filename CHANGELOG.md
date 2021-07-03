@@ -20,6 +20,10 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - Incorrect vi cursor position after invoking `ScrollPageHalfUp` action
 - Slow PTY read performance with extremely dense grids
 
+### Removed
+
+- Config option `background_opacity`, you should use `window.background_opacity` instead
+
 ## 0.8.0
 
 ### Packaging
