@@ -4,6 +4,7 @@ use bitflags::bitflags;
 use serde::{Deserialize, Serialize};
 
 use crate::ansi::{Color, NamedColor};
+use crate::graphics::GraphicCell;
 use crate::grid::{self, GridCell};
 use crate::index::Column;
 
@@ -24,6 +25,7 @@ bitflags! {
         const STRIKEOUT                 = 0b0000_0010_0000_0000;
         const LEADING_WIDE_CHAR_SPACER  = 0b0000_0100_0000_0000;
         const DOUBLE_UNDERLINE          = 0b0000_1000_0000_0000;
+        const GRAPHICS                  = 0b0001_0000_0000_0000;
     }
 }
 
@@ -53,6 +55,9 @@ impl ResetDiscriminant<Color> for Cell {
 #[derive(Serialize, Deserialize, Default, Debug, Clone, Eq, PartialEq)]
 struct CellExtra {
     zerowidth: Vec<char>,
+
+    #[serde(skip)]
+    graphic: Option<Box<GraphicCell>>,
 }
 
 /// Content and attributes of a single cell in the terminal grid.
@@ -100,6 +105,21 @@ impl Cell {
         }
     }
 
+    /// Graphic present in the cell.
+    #[inline]
+    pub fn graphic(&self) -> Option<&GraphicCell> {
+        self.extra.as_deref().and_then(|extra| extra.graphic.as_deref())
+    }
+
+    /// Write the graphic data in the cell.
+    #[inline]
+    pub fn set_graphic(&mut self, graphic_cell: GraphicCell) {
+        let mut extra = self.extra.get_or_insert_with(Default::default);
+        extra.graphic = Some(Box::new(graphic_cell));
+
+        self.flags_mut().insert(Flags::GRAPHICS);
+    }
+
     /// Remove all wide char data from a cell.
     #[inline(never)]
     pub fn clear_wide(&mut self) {
@@ -122,7 +142,8 @@ impl GridCell for Cell {
                     | Flags::STRIKEOUT
                     | Flags::WRAPLINE
                     | Flags::WIDE_CHAR_SPACER
-                    | Flags::LEADING_WIDE_CHAR_SPACER,
+                    | Flags::LEADING_WIDE_CHAR_SPACER
+                    | Flags::GRAPHICS,
             )
             && self.extra.as_ref().map(|extra| extra.zerowidth.is_empty()) != Some(false)
     }

@@ -10,6 +10,7 @@ use vte::{Params, ParamsIter};
 
 use alacritty_config_derive::ConfigDeserialize;
 
+use crate::graphics::{sixel, GraphicData};
 use crate::index::{Column, Line};
 use crate::term::color::Rgb;
 
@@ -136,6 +137,9 @@ enum Dcs {
 
     /// End of the synchronized update.
     SyncEnd,
+
+    /// Sixel data
+    SixelData(Box<sixel::Parser>),
 }
 
 /// The processor wraps a `vte::Parser` to ultimately call methods on a Handler.
@@ -240,6 +244,7 @@ impl Processor {
                     self.state.sync_state.timeout = Some(Instant::now() + SYNC_UPDATE_TIMEOUT);
                 },
                 Some(Dcs::SyncEnd) => self.stop_sync(handler),
+                Some(Dcs::SixelData(_)) => (),
                 None => (),
             },
         }
@@ -456,6 +461,17 @@ pub trait Handler {
 
     /// Report text area size in characters.
     fn text_area_size_chars(&mut self) {}
+
+    /// Report a graphics attribute.
+    fn graphics_attribute(&mut self, _: u16, _: u16) {}
+
+    /// Create a parser for Sixel data.
+    fn start_sixel_graphic(&mut self, _params: &Params) -> Option<Box<sixel::Parser>> {
+        None
+    }
+
+    /// Insert a new graphic item.
+    fn insert_graphic(&mut self, _data: GraphicData, _palette: Option<Vec<Rgb>>) {}
 }
 
 /// Terminal cursor configuration.
@@ -529,6 +545,8 @@ pub enum Mode {
     LineFeedNewLine = 20,
     /// ?25
     ShowCursor = 25,
+    /// ?80
+    SixelScrolling = 80,
     /// ?1000
     ReportMouseClicks = 1000,
     /// ?1002
@@ -547,6 +565,8 @@ pub enum Mode {
     UrgencyHints = 1042,
     /// ?1049
     SwapScreenAndSetRestoreCursor = 1049,
+    /// Use a private palette for each new graphic.
+    SixelPrivateColorRegisters = 1070,
     /// ?2004
     BracketedPaste = 2004,
 }
@@ -568,6 +588,7 @@ impl Mode {
                 7 => Mode::LineWrap,
                 12 => Mode::BlinkingCursor,
                 25 => Mode::ShowCursor,
+                80 => Mode::SixelScrolling,
                 1000 => Mode::ReportMouseClicks,
                 1002 => Mode::ReportCellMouseMotion,
                 1003 => Mode::ReportAllMouseMotion,
@@ -577,6 +598,7 @@ impl Mode {
                 1007 => Mode::AlternateScroll,
                 1042 => Mode::UrgencyHints,
                 1049 => Mode::SwapScreenAndSetRestoreCursor,
+                1070 => Mode::SixelPrivateColorRegisters,
                 2004 => Mode::BracketedPaste,
                 _ => {
                     trace!("[unimplemented] primitive mode: {}", num);
@@ -908,6 +930,10 @@ where
                     self.state.dcs = Some(Dcs::SyncStart);
                 }
             },
+            ('q', []) => {
+                let parser = self.handler.start_sixel_graphic(params);
+                self.state.dcs = parser.map(Dcs::SixelData);
+            },
             _ => debug!(
                 "[unhandled hook] params={:?}, ints: {:?}, ignore: {:?}, action: {:?}",
                 params, intermediates, ignore, action
@@ -917,16 +943,29 @@ where
 
     #[inline]
     fn put(&mut self, byte: u8) {
-        debug!("[unhandled put] byte={:?}", byte);
+        match self.state.dcs {
+            Some(Dcs::SixelData(ref mut parser)) => {
+                if let Err(err) = parser.put(byte) {
+                    log::warn!("Failed to parse Sixel data: {}", err);
+                    self.state.dcs = None;
+                }
+            },
+
+            _ => debug!("[unhandled put] byte={:?}", byte),
+        }
     }
 
     #[inline]
     fn unhook(&mut self) {
-        match self.state.dcs {
+        match self.state.dcs.take() {
             Some(Dcs::SyncStart) => {
                 self.state.sync_state.timeout = Some(Instant::now() + SYNC_UPDATE_TIMEOUT);
             },
             Some(Dcs::SyncEnd) => (),
+            Some(Dcs::SixelData(parser)) => match parser.finish() {
+                Ok((graphic, palette)) => self.handler.insert_graphic(graphic, Some(palette)),
+                Err(err) => log::warn!("Failed to parse Sixel data: {}", err),
+            },
             _ => debug!("[unhandled unhook]"),
         }
     }
@@ -1235,6 +1274,7 @@ where
                 handler.set_scrolling_region(top, bottom);
             },
             ('S', []) => handler.scroll_up(next_param_or(1) as usize),
+            ('S', [b'?']) => handler.graphics_attribute(next_param_or(0), next_param_or(0)),
             ('s', []) => handler.save_cursor_position(),
             ('T', []) => handler.scroll_down(next_param_or(1) as usize),
             ('t', []) => match next_param_or(1) as usize {

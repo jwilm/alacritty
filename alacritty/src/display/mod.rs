@@ -479,7 +479,7 @@ impl Display {
     /// This call may block if vsync is enabled.
     pub fn draw<T: EventListener>(
         &mut self,
-        terminal: MutexGuard<'_, Term<T>>,
+        mut terminal: MutexGuard<'_, Term<T>>,
         message_buffer: &MessageBuffer,
         config: &Config,
         search_state: &SearchState,
@@ -502,6 +502,8 @@ impl Display {
         let vi_mode = terminal.mode().contains(TermMode::VI);
         let vi_mode_cursor = if vi_mode { Some(terminal.vi_mode_cursor) } else { None };
 
+        let graphics_queues = terminal.graphics_take_queues();
+
         // Drop terminal as early as possible to free lock.
         drop(terminal);
 
@@ -509,7 +511,12 @@ impl Display {
             api.clear(background_color);
         });
 
+        if let Some(graphics_queues) = graphics_queues {
+            self.renderer.graphics_run_updates(graphics_queues, &size_info);
+        }
+
         let mut lines = RenderLines::new();
+        let mut graphics_list = renderer::graphics::RenderList::default();
 
         // Draw grid.
         {
@@ -532,11 +539,16 @@ impl Display {
                     // Update underline/strikeout.
                     lines.update(&cell);
 
+                    // Track any graphic present in the cell.
+                    graphics_list.update(&cell);
+
                     // Draw the cell.
                     api.render_cell(cell, glyph_cache);
                 }
             });
         }
+
+        self.renderer.graphics_draw(graphics_list, &size_info);
 
         let mut rects = lines.rects(&metrics, &size_info);
 

@@ -14,6 +14,7 @@ use fnv::FnvHasher;
 use log::{error, info};
 use unicode_width::UnicodeWidthChar;
 
+use alacritty_terminal::graphics::UpdateQueues;
 use alacritty_terminal::index::Point;
 use alacritty_terminal::term::cell::Flags;
 use alacritty_terminal::term::color::Rgb;
@@ -24,8 +25,10 @@ use crate::config::ui_config::{Delta, UiConfig};
 use crate::display::content::RenderableCell;
 use crate::gl;
 use crate::gl::types::*;
+use crate::renderer::graphics::GraphicsRenderer;
 use crate::renderer::rects::{RectRenderer, RenderRect};
 
+pub mod graphics;
 pub mod rects;
 
 // Shader source.
@@ -439,6 +442,7 @@ pub struct QuadRenderer {
     batch: Batch,
 
     rect_renderer: RectRenderer,
+    graphics_renderer: GraphicsRenderer,
 }
 
 #[derive(Debug)]
@@ -638,6 +642,7 @@ impl QuadRenderer {
         let mut renderer = Self {
             program,
             rect_renderer: RectRenderer::new()?,
+            graphics_renderer: GraphicsRenderer::new()?,
             vao,
             ebo,
             vbo_instance,
@@ -680,6 +685,19 @@ impl QuadRenderer {
             let height = size_info.height() as i32;
             gl::Viewport(padding_x, padding_y, width - 2 * padding_x, height - 2 * padding_y);
         }
+    }
+
+    /// Run the required actions to apply changes for the graphics in the grid.
+    #[inline]
+    pub fn graphics_run_updates(&mut self, update_queues: UpdateQueues, size_info: &SizeInfo) {
+        self.graphics_renderer.run_updates(update_queues, size_info);
+    }
+
+    /// Draw graphics visible in the display.
+    #[inline]
+    pub fn graphics_draw(&mut self, render_list: graphics::RenderList, size_info: &SizeInfo) {
+        self.graphics_renderer.draw(render_list, size_info);
+        self.active_tex = 0;
     }
 
     pub fn with_api<F, T>(&mut self, config: &UiConfig, props: &SizeInfo, func: F) -> T
@@ -842,6 +860,7 @@ impl<'a> RenderApi<'a> {
                 point: Point::new(point.line, point.column + i),
                 character,
                 zerowidth: None,
+                graphic: None,
                 flags: Flags::empty(),
                 bg_alpha: 1.0,
                 fg,

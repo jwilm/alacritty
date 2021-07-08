@@ -71,6 +71,7 @@ brevity.
 | `CSI SP q` | IMPLEMENTED |                                                   |
 | `CSI r`    | IMPLEMENTED |                                                   |
 | `CSI S`    | IMPLEMENTED |                                                   |
+| `CSI ? S`  | PARTIAL     | Only for reading attributes.                      |
 | `CSI s`    | IMPLEMENTED |                                                   |
 | `CSI T`    | IMPLEMENTED |                                                   |
 | `CSI t`    | PARTIAL     | Only parameters `22` and `23` are supported       |
@@ -102,3 +103,4 @@ brevity.
 | ESCAPE    | STATUS      | NOTE                                               |
 | --------- | ----------- | -------------------------------------------------- |
 | `DCS = s` | IMPLEMENTED |                                                    |
+| `DCS q`   | IMPLEMENTED |                                                    |

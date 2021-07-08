@@ -34,6 +34,7 @@ libc = "0.2"
 unicode-width = "0.1"
 bitflags = "1"
 dirs = "3.0.1"
+memoffset = "0.6.1"
 
 [build-dependencies]
 gl_generator = "0.14.0"

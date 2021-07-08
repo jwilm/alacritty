@@ -32,6 +32,7 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/).
 - IME composition preview not appearing on Windows
 - Synchronized terminal updates using `DCS = 1 s ST`/`DCS = 2 s ST`
 - Regex terminal hints ([see features.md](./docs/features.md#hints))
+- Support for Sixel protocol
 - macOS keybinding (cmd+alt+H) hiding all windows other than Alacritty
 - Support for `magnet` URLs
 

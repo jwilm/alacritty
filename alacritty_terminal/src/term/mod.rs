@@ -1,6 +1,7 @@
 //! Exports the `Term` type which is a high-level API for the Grid.
 
 use std::cmp::{max, min};
+use std::fmt::Write;
 use std::ops::{Index, IndexMut, Range};
 use std::sync::Arc;
 use std::{mem, ptr, str};
@@ -9,12 +10,16 @@ use bitflags::bitflags;
 use log::{debug, trace};
 use serde::{Deserialize, Serialize};
 use unicode_width::UnicodeWidthChar;
+use vte::Params;
 
 use crate::ansi::{
     self, Attr, CharsetIndex, Color, CursorShape, CursorStyle, Handler, NamedColor, StandardCharset,
 };
 use crate::config::Config;
 use crate::event::{Event, EventListener};
+use crate::graphics::{
+    sixel, GraphicCell, GraphicData, Graphics, TextureRef, UpdateQueues, MAX_GRAPHIC_DIMENSIONS,
+};
 use crate::grid::{Dimensions, Grid, GridIterator, Scroll};
 use crate::index::{self, Boundary, Column, Direction, Line, Point, Side};
 use crate::selection::{Selection, SelectionRange};
@@ -62,6 +67,8 @@ bitflags! {
         const ALTERNATE_SCROLL    = 0b0000_1000_0000_0000_0000;
         const VI                  = 0b0001_0000_0000_0000_0000;
         const URGENCY_HINTS       = 0b0010_0000_0000_0000_0000;
+        const SIXEL_SCROLLING     = 0b0100_0000_0000_0000_0000;
+        const SIXEL_PRIV_PALETTE  = 0b1000_0000_0000_0000_0000;
         const ANY                 = std::u32::MAX;
     }
 }
@@ -72,6 +79,8 @@ impl Default for TermMode {
             | TermMode::LINE_WRAP
             | TermMode::ALTERNATE_SCROLL
             | TermMode::URGENCY_HINTS
+            | TermMode::SIXEL_SCROLLING
+            | TermMode::SIXEL_PRIV_PALETTE
     }
 }
 
@@ -269,6 +278,9 @@ pub struct Term<T> {
     /// Information about cell dimensions.
     cell_width: usize,
     cell_height: usize,
+
+    /// Data to add graphics to a grid.
+    graphics: Graphics,
 }
 
 impl<T> Term<T> {
@@ -320,6 +332,7 @@ impl<T> Term<T> {
             selection: None,
             cell_width: size.cell_width as usize,
             cell_height: size.cell_height as usize,
+            graphics: Graphics::default(),
         }
     }
 
@@ -468,6 +481,12 @@ impl<T> Term<T> {
     #[cfg(test)]
     pub fn grid_mut(&mut self) -> &mut Grid<Cell> {
         &mut self.grid
+    }
+
+    /// Get queues to update graphic data. If both queues are empty, it returns
+    /// `None`.
+    pub fn graphics_take_queues(&mut self) -> Option<UpdateQueues> {
+        self.graphics.take_queues()
     }
 
     /// Resize terminal to new dimensions.
@@ -1564,6 +1583,10 @@ impl<T: EventListener> Handler for Term<T> {
                 style.blinking = true;
                 self.event_proxy.send_event(Event::CursorBlinkingChange(true));
             },
+            ansi::Mode::SixelScrolling => self.mode.insert(TermMode::SIXEL_SCROLLING),
+            ansi::Mode::SixelPrivateColorRegisters => {
+                self.mode.insert(TermMode::SIXEL_PRIV_PALETTE)
+            },
         }
     }
 
@@ -1605,6 +1628,11 @@ impl<T: EventListener> Handler for Term<T> {
                 let style = self.cursor_style.get_or_insert(self.default_cursor_style);
                 style.blinking = false;
                 self.event_proxy.send_event(Event::CursorBlinkingChange(false));
+            },
+            ansi::Mode::SixelScrolling => self.mode.remove(TermMode::SIXEL_SCROLLING),
+            ansi::Mode::SixelPrivateColorRegisters => {
+                self.graphics.sixel_shared_palette = None;
+                self.mode.remove(TermMode::SIXEL_PRIV_PALETTE);
             },
         }
     }
@@ -1727,6 +1755,116 @@ impl<T: EventListener> Handler for Term<T> {
     fn text_area_size_chars(&mut self) {
         let text = format!("\x1b[8;{};{}t", self.screen_lines(), self.columns());
         self.event_proxy.send_event(Event::PtyWrite(text));
+    }
+
+    #[inline]
+    fn graphics_attribute(&mut self, pi: u16, pa: u16) {
+        // From Xterm documentation:
+        //
+        //   Pi = 1  -> item is number of color registers.
+        //   Pi = 2  -> item is Sixel graphics geometry (in pixels).
+        //
+        //   Pa = 1  -> read attribute.
+        //   Pa = 4  -> read the maximum allowed value.
+        //
+        // Any other request reports an error.
+
+        let (ps, pv) = if pa == 1 || pa == 4 {
+            match pi {
+                1 => (0, &[sixel::MAX_COLOR_REGISTERS][..]),
+                2 => (0, &MAX_GRAPHIC_DIMENSIONS[..]),
+                _ => (1, &[][..]), // Report error in Pi
+            }
+        } else {
+            (2, &[][..]) // Report error in Pa
+        };
+
+        let mut text = format!("\x1b[?{};{}", pi, ps);
+
+        for item in pv {
+            let _ = write!(&mut text, ";{}", item);
+        }
+
+        text.push('S');
+        self.event_proxy.send_event(Event::PtyWrite(text));
+    }
+
+    fn start_sixel_graphic(&mut self, params: &Params) -> Option<Box<sixel::Parser>> {
+        let palette = self.graphics.sixel_shared_palette.take();
+        Some(Box::new(sixel::Parser::new(params, palette)))
+    }
+
+    fn insert_graphic(&mut self, graphic: GraphicData, palette: Option<Vec<Rgb>>) {
+        // Store last palette if we receive a new one, and it is shared.
+        if let Some(palette) = palette {
+            if !self.mode.contains(TermMode::SIXEL_PRIV_PALETTE) {
+                self.graphics.sixel_shared_palette = Some(palette);
+            }
+        }
+
+        if graphic.width > MAX_GRAPHIC_DIMENSIONS[0] || graphic.height > MAX_GRAPHIC_DIMENSIONS[1] {
+            return;
+        }
+
+        let width = graphic.width as u16;
+        let height = graphic.height as u16;
+
+        if width == 0 || height == 0 {
+            return;
+        }
+
+        // Add the graphic data to the pending queue.
+        let graphic_id = self.graphics.next_id();
+        self.graphics.pending.push(GraphicData { id: graphic_id, ..graphic });
+
+        // If SIXEL_SCROLLING is enabled, the start of the graphic is the
+        // cursor position, and the grid can be scrolled if the graphic is
+        // larger than the screen. The cursor is moved to the next line
+        // after the graphic.
+        //
+        // If it is disabled, the graphic starts at (0, 0), the grid is never
+        // scrolled, and the cursor position is unmodified.
+
+        let scrolling = self.mode.contains(TermMode::SIXEL_SCROLLING);
+
+        // Fill the cells under the graphic.
+        //
+        // The cell in the first column contains a reference to the
+        // graphic, with the offset from the start. The rest of the
+        // cells are not overwritten, allowing any text behind
+        // transparent portions of the image to be visible.
+
+        let left = if scrolling { self.grid.cursor.point.column.0 } else { 0 };
+
+        let texture = Arc::new(TextureRef {
+            id: graphic_id,
+            remove_queue: Arc::downgrade(&self.graphics.remove_queue),
+        });
+
+        for (top, offset_y) in (0..).zip((0..height).step_by(self.cell_height)) {
+            let line = if scrolling {
+                self.grid.cursor.point.line
+            } else {
+                // Check if the image is beyond the screen limit.
+                if top >= self.screen_lines() as i32 {
+                    break;
+                }
+
+                Line(top)
+            };
+
+            // Store a reference to the graphic in the first column.
+            let graphic_cell = GraphicCell { texture: texture.clone(), offset_x: 0, offset_y };
+            self.grid[line][Column(left)].set_graphic(graphic_cell);
+
+            if scrolling {
+                self.linefeed();
+            }
+        }
+
+        if scrolling {
+            self.carriage_return();
+        }
     }
 }
 
