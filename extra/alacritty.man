@@ -62,6 +62,8 @@ Defines the window title [default: Alacritty]
 .TP
 \fB\-\-working\-directory\fR <working\-directory>
 Start the shell in the specified working directory
+.SH "SIGNALS"
+\fBSIGUSR1\fR makes Alacritty reload its configuration.
 .SH "SEE ALSO"
 See the alacritty github repository at https://github.com/alacritty/alacritty for the full documentation.
 .SH "BUGS"

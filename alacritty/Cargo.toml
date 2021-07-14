@@ -39,6 +39,7 @@ dirs = "3.0.1"
 gl_generator = "0.14.0"
 
 [target.'cfg(not(windows))'.dependencies]
+signal-hook = "0.3.9"
 xdg = "2"
 
 [target.'cfg(not(target_os = "macos"))'.dependencies]

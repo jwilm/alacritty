@@ -77,4 +77,11 @@ file. If an application captures your mouse clicks, which is indicated by a
 change in mouse cursor shape, you're required to hold <kbd>Shift</kbd> to bypass
 that.
 
+## Live configuration reloading
+
+Alacritty will automatically reload its configuration file when it has changed.
+
+Additionally, you can trigger a reload manually using the `SIGUSR1` signal. This
+is useful in cases where a symbolic link to the configuration file is replaced.
+
 [configuration file]: ../alacritty.yml

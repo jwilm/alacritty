@@ -5,6 +5,8 @@ use std::time::Duration;
 
 use log::{debug, error};
 use notify::{watcher, DebouncedEvent, RecursiveMode, Watcher};
+#[cfg(not(windows))]
+use signal_hook::{consts::signal::*, iterator::Signals};
 
 use alacritty_terminal::thread;
 
@@ -16,6 +18,26 @@ const DEBOUNCE_DELAY: Duration = Duration::from_millis(10);
 const DEBOUNCE_DELAY: Duration = Duration::from_millis(1000);
 
 pub fn watch(mut paths: Vec<PathBuf>, event_proxy: EventProxy) {
+    // Don't do config reloading if there is no config path.
+    if paths.is_empty() {
+        return;
+    }
+
+    // Launch a signal watcher thread that reloads the main config path on SIGUSR1.
+    #[cfg(not(windows))]
+    thread::spawn_named("signal watcher", {
+        let main_config_path = paths[0].clone();
+        let event_proxy = event_proxy.clone();
+        move || {
+            let mut signals = Signals::new(&[SIGUSR1]).expect("error preparing signal handling");
+            for sig in signals.forever() {
+                if sig == SIGUSR1 {
+                    event_proxy.send_event(Event::ConfigReload(main_config_path.clone()));
+                }
+            }
+        }
+    });
+
     // Canonicalize all paths, filtering out the ones that do not exist.
     paths = paths
         .drain(..)
@@ -28,7 +50,7 @@ pub fn watch(mut paths: Vec<PathBuf>, event_proxy: EventProxy) {
         })
         .collect();
 
-    // Don't monitor config if there is no path to watch.
+    // Don't monitor config if there is no canonical path to watch.
     if paths.is_empty() {
         return;
     }
