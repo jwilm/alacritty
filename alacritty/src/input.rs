@@ -29,7 +29,7 @@ use alacritty_terminal::term::{ClipboardType, SizeInfo, Term, TermMode};
 use alacritty_terminal::vi_mode::ViMotion;
 
 use crate::clipboard::Clipboard;
-use crate::config::{Action, BindingMode, Config, Key, SearchAction, ViAction};
+use crate::config::{Action, BindingMode, Config, Key, MouseAction, SearchAction, ViAction};
 use crate::daemon::start_daemon;
 use crate::display::hint::HintMatch;
 use crate::display::window::Window;
@@ -231,6 +231,41 @@ impl<T: EventListener> Execute<T> for Action {
             Action::Search(SearchAction::SearchDeleteWord) => ctx.search_pop_word(),
             Action::Search(SearchAction::SearchHistoryPrevious) => ctx.search_history_previous(),
             Action::Search(SearchAction::SearchHistoryNext) => ctx.search_history_next(),
+            Action::Mouse(MouseAction::ExpandSelection) => {
+                let selection_type = match ctx.mouse().click_state {
+                    ClickState::Click => {
+                        if ctx.modifiers().ctrl() {
+                            Some(SelectionType::Block)
+                        } else {
+                            Some(SelectionType::Simple)
+                        }
+                    },
+                    ClickState::DoubleClick => Some(SelectionType::Semantic),
+                    ClickState::TripleClick => Some(SelectionType::Lines),
+                    ClickState::None => None,
+                };
+
+                if let Some(selection_type) = selection_type {
+                    // Load mouse point, treating message bar and padding as the closest cell.
+                    let display_offset = ctx.terminal().grid().display_offset();
+                    let point = ctx.mouse().point(&ctx.size_info(), display_offset);
+
+                    let cell_side = ctx.mouse().cell_side;
+
+                    let selection = match &mut ctx.terminal_mut().selection {
+                        Some(selection) => selection,
+                        None => return,
+                    };
+
+                    selection.ty = selection_type;
+                    ctx.update_selection(point, cell_side);
+
+                    // Move vi mode cursor to mouse click position.
+                    if ctx.terminal().mode().contains(TermMode::VI) && !ctx.search_active() {
+                        ctx.terminal_mut().vi_mode_cursor.point = point;
+                    }
+                }
+            },
             Action::SearchForward => ctx.start_search(Direction::Right),
             Action::SearchBackward => ctx.start_search(Direction::Left),
             Action::Copy => ctx.copy_selection(ClipboardType::Clipboard),
@@ -533,46 +568,9 @@ impl<T: EventListener, A: ActionContext<T>> Processor<T, A> {
 
             match button {
                 MouseButton::Left => self.on_left_click(point),
-                MouseButton::Right => self.on_right_click(point),
                 // Do nothing when using buttons other than LMB.
-                _ => self.ctx.mouse_mut().click_state = ClickState::None,
+                _ => (),
             }
-        }
-    }
-
-    /// Handle selection expansion on right click.
-    fn on_right_click(&mut self, point: Point) {
-        match self.ctx.mouse().click_state {
-            ClickState::Click => {
-                let selection_type = if self.ctx.modifiers().ctrl() {
-                    SelectionType::Block
-                } else {
-                    SelectionType::Simple
-                };
-
-                self.expand_selection(point, selection_type);
-            },
-            ClickState::DoubleClick => self.expand_selection(point, SelectionType::Semantic),
-            ClickState::TripleClick => self.expand_selection(point, SelectionType::Lines),
-            ClickState::None => (),
-        }
-    }
-
-    /// Expand existing selection.
-    fn expand_selection(&mut self, point: Point, selection_type: SelectionType) {
-        let cell_side = self.ctx.mouse().cell_side;
-
-        let selection = match &mut self.ctx.terminal_mut().selection {
-            Some(selection) => selection,
-            None => return,
-        };
-
-        selection.ty = selection_type;
-        self.ctx.update_selection(point, cell_side);
-
-        // Move vi mode cursor to mouse click position.
-        if self.ctx.terminal().mode().contains(TermMode::VI) && !self.ctx.search_active() {
-            self.ctx.terminal_mut().vi_mode_cursor.point = point;
         }
     }
 
@@ -749,8 +747,10 @@ impl<T: EventListener, A: ActionContext<T>> Processor<T, A> {
         } else {
             match state {
                 ElementState::Pressed => {
-                    self.process_mouse_bindings(button);
+                    // process mouse press before bindings to
+                    // correctly set click_state
                     self.on_mouse_press(button);
+                    self.process_mouse_bindings(button);
                 },
                 ElementState::Released => self.on_mouse_release(button),
             }
