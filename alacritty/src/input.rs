@@ -1119,6 +1119,7 @@ mod tests {
             initial_button: $initial_button:expr,
             input: $input:expr,
             end_state: $end_state:expr,
+            end_button: $end_button:expr,
         } => {
             #[test]
             fn $name() {
@@ -1138,6 +1139,7 @@ mod tests {
 
                 let mut mouse = Mouse {
                     click_state: $initial_state,
+                    last_click_button: $initial_button,
                     ..Mouse::default()
                 };
 
@@ -1171,6 +1173,7 @@ mod tests {
                 };
 
                 assert_eq!(processor.ctx.mouse.click_state, $end_state);
+                assert_eq!(processor.ctx.mouse.last_click_button, $end_button);
             }
         }
     }
@@ -1208,6 +1211,7 @@ mod tests {
             window_id: unsafe { std::mem::transmute_copy(&0) },
         },
         end_state: ClickState::Click,
+        end_button: MouseButton::Left,
     }
 
     test_clickstate! {
@@ -1224,6 +1228,7 @@ mod tests {
             window_id: unsafe { std::mem::transmute_copy(&0) },
         },
         end_state: ClickState::Click,
+        end_button: MouseButton::Right,
     }
 
     test_clickstate! {
@@ -1239,7 +1244,8 @@ mod tests {
             },
             window_id: unsafe { std::mem::transmute_copy(&0) },
         },
-        end_state: ClickState::None,
+        end_state: ClickState::Click,
+        end_button: MouseButton::Middle,
     }
 
     test_clickstate! {
@@ -1256,6 +1262,24 @@ mod tests {
             window_id: unsafe { std::mem::transmute_copy(&0) },
         },
         end_state: ClickState::DoubleClick,
+        end_button: MouseButton::Left,
+    }
+
+    test_clickstate! {
+        name: double_click_right,
+        initial_state: ClickState::Click,
+        initial_button: MouseButton::Right,
+        input: GlutinEvent::WindowEvent {
+            event: WindowEvent::MouseInput {
+                state: ElementState::Pressed,
+                button: MouseButton::Right,
+                device_id: unsafe { std::mem::transmute_copy(&0) },
+                modifiers: ModifiersState::default(),
+            },
+            window_id: unsafe { std::mem::transmute_copy(&0) },
+        },
+        end_state: ClickState::DoubleClick,
+        end_button: MouseButton::Right,
     }
 
     test_clickstate! {
@@ -1272,6 +1296,24 @@ mod tests {
             window_id: unsafe { std::mem::transmute_copy(&0) },
         },
         end_state: ClickState::TripleClick,
+        end_button: MouseButton::Left,
+    }
+
+    test_clickstate! {
+        name: triple_click_middle,
+        initial_state: ClickState::DoubleClick,
+        initial_button: MouseButton::Middle,
+        input: GlutinEvent::WindowEvent {
+            event: WindowEvent::MouseInput {
+                state: ElementState::Pressed,
+                button: MouseButton::Middle,
+                device_id: unsafe { std::mem::transmute_copy(&0) },
+                modifiers: ModifiersState::default(),
+            },
+            window_id: unsafe { std::mem::transmute_copy(&0) },
+        },
+        end_state: ClickState::TripleClick,
+        end_button: MouseButton::Middle,
     }
 
     test_clickstate! {
@@ -1288,6 +1330,7 @@ mod tests {
             window_id: unsafe { std::mem::transmute_copy(&0) },
         },
         end_state: ClickState::Click,
+        end_button: MouseButton::Right,
     }
 
     test_process_binding! {
