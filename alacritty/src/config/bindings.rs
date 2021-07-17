@@ -1047,7 +1047,8 @@ impl<'a> Deserialize<'a> for RawBinding {
                                 SearchAction::deserialize(value.clone())
                             {
                                 Some(search_action.into())
-                            } else if let Ok(mouse_action) = MouseAction::deserialize(value.clone()) {
+                            } else if let Ok(mouse_action) = MouseAction::deserialize(value.clone())
+                            {
                                 Some(mouse_action.into())
                             } else {
                                 match Action::deserialize(value.clone()).map_err(V::Error::custom) {
@@ -1125,7 +1126,7 @@ impl<'a> Deserialize<'a> for RawBinding {
                         action
                     },
                     (Some(action @ Action::Mouse(_)), None, None) => {
-                        if !mouse.is_some() {
+                        if mouse.is_none() {
                             return Err(V::Error::custom(format!(
                                 "action `{}` is only available in mouse binding",
                                 action,

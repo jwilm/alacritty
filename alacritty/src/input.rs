@@ -566,10 +566,8 @@ impl<T: EventListener, A: ActionContext<T>> Processor<T, A> {
             let display_offset = self.ctx.terminal().grid().display_offset();
             let point = self.ctx.mouse().point(&self.ctx.size_info(), display_offset);
 
-            match button {
-                MouseButton::Left => self.on_left_click(point),
-                // Do nothing when using buttons other than LMB.
-                _ => (),
+            if let MouseButton::Left = button {
+                self.on_left_click(point)
             }
         }
     }
