@@ -1,4 +1,4 @@
-#version 330 core
+/* Version directive added by shader_composer() */
 
 flat in vec4 color;
 

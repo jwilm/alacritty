@@ -1,4 +1,4 @@
-#version 330 core
+/* Version directive added by shader_composer() */
 // Cell properties.
 layout(location = 0) in vec2 gridCoords;
 

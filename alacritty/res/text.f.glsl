@@ -1,4 +1,4 @@
-#version 330 core
+/* Version directive added by shader_composer() */
 in vec2 TexCoords;
 flat in vec4 fg;
 flat in vec4 bg;

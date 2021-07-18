@@ -4,6 +4,7 @@ use std::hash::BuildHasherDefault;
 use std::io;
 use std::mem::size_of;
 use std::ptr;
+use std::ffi::CStr;
 
 use bitflags::bitflags;
 use crossfont::{
@@ -1089,12 +1090,35 @@ pub fn create_program(vertex: GLuint, fragment: GLuint) -> Result<GLuint, Shader
     }
 }
 
+pub fn compose_shader(source: &'static str) -> String {
+    let mut shader_output: String = "".to_string();
+    
+    // Get GLSL version of the current GL context
+    let shd_version_cstring: &CStr = unsafe {CStr::from_ptr(gl::GetString(gl::SHADING_LANGUAGE_VERSION) as *const i8)};
+    let shd_version_string: &str = shd_version_cstring.to_str().unwrap();
+
+    // Add #version directive
+    if shd_version_string == "1.20" {
+	let version120: &str = "#version 120\n\
+				#extension GL_ARB_explicit_attrib_location : require\n\
+				#extension GL_EXT_gpu_shader4 : require\n\
+				#define texture(a, b) texture2D(a, b)";
+	shader_output.push_str(version120);
+    } else {
+	let version330: &str = "#version 330 core\n";
+	shader_output.push_str(version330);
+    }
+    shader_output.push_str(source);
+    return shader_output;
+}
+
 pub fn create_shader(kind: GLenum, source: &'static str) -> Result<GLuint, ShaderCreationError> {
-    let len: [GLint; 1] = [source.len() as GLint];
+    let composed_shader: String = compose_shader(source);
+    let len: [GLint; 1] = [composed_shader.len() as GLint];
 
     let shader = unsafe {
         let shader = gl::CreateShader(kind);
-        gl::ShaderSource(shader, 1, &(source.as_ptr() as *const _), len.as_ptr());
+        gl::ShaderSource(shader, 1, &(composed_shader.as_ptr() as *const _), len.as_ptr());
         gl::CompileShader(shader);
         shader
     };
