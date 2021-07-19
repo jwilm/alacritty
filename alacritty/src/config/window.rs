@@ -7,7 +7,7 @@ use serde::de::{self, MapAccess, Visitor};
 use serde::{Deserialize, Deserializer};
 
 use alacritty_config_derive::ConfigDeserialize;
-use alacritty_terminal::config::LOG_TARGET_CONFIG;
+use alacritty_terminal::config::{Percentage, LOG_TARGET_CONFIG};
 use alacritty_terminal::index::Column;
 
 use crate::config::ui_config::Delta;
@@ -15,7 +15,7 @@ use crate::config::ui_config::Delta;
 /// Default Alacritty name, used for window title and class.
 pub const DEFAULT_NAME: &str = "Alacritty";
 
-#[derive(ConfigDeserialize, Debug, Clone, PartialEq, Eq)]
+#[derive(ConfigDeserialize, Debug, Clone, PartialEq)]
 pub struct WindowConfig {
     /// Initial position.
     pub position: Option<Delta<i32>>,
@@ -45,6 +45,9 @@ pub struct WindowConfig {
     /// Window class.
     pub class: Class,
 
+    /// Background opacity from 0.0 to 1.0.
+    pub background_opacity: Percentage,
+
     /// Pixel padding.
     padding: Delta<u8>,
 
@@ -64,6 +67,7 @@ impl Default for WindowConfig {
             gtk_theme_variant: Default::default(),
             dynamic_padding: Default::default(),
             class: Default::default(),
+            background_opacity: Default::default(),
             padding: Default::default(),
             dimensions: Default::default(),
         }

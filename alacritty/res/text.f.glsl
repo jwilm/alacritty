@@ -18,7 +18,7 @@ void main() {
         }
 
         alphaMask = vec4(1.0);
-        color = vec4(bg.rgb, 1.0);
+        color = vec4(bg.rgb, bg.a);
     } else if ((int(fg.a) & COLORED) != 0) {
         // Color glyphs, like emojis.
         vec4 glyphColor = texture(mask, TexCoords);

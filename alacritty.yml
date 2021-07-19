@@ -63,6 +63,13 @@
   #     - buttonless: Title bar, transparent background and no title bar buttons
   #decorations: full
 
+  # Background opacity
+  #
+  # Window opacity as a floating point number from `0.0` to `1.0`.
+  # The value `0.0` is completely transparent and `1.0` is opaque.
+  #background_opacity: 1.0
+
+
   # Startup Mode (changes require restart)
   #
   # Values for `startup_mode`:
@@ -312,6 +319,13 @@
   #
   #indexed_colors: []
 
+  # Opaque backgrounds with transparency enabled
+  #
+  # Whether or not `background_opacity` applies to all backgrounds or only to the
+  # default background. When set to `false` all cells will be transparent
+  # regardless of their background color.
+  #opaque_background_colors: true
+
 # Bell
 #
 # The bell is rung every time the BEL control character is received.
@@ -352,12 +366,6 @@
   #     args: ["Hello, World!"]
   #
   #command: None
-
-# Background opacity
-#
-# Window opacity as a floating point number from `0.0` to `1.0`.
-# The value `0.0` is completely transparent and `1.0` is opaque.
-#background_opacity: 1.0
 
 #selection:
   # This string contains all characters that are used as separators for

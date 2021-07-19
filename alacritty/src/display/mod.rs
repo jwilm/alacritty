@@ -484,12 +484,17 @@ impl Display {
         config: &Config,
         search_state: &SearchState,
     ) {
+        let mut grid_cells = {
+            let cols = self.size_info.columns();
+            let lines = self.size_info.screen_lines();
+            Vec::with_capacity(cols * lines)
+        };
         // Collect renderable content before the terminal is dropped.
         let mut content = RenderableContent::new(config, self, &terminal, search_state);
-        let mut grid_cells = Vec::new();
         for cell in &mut content {
             grid_cells.push(cell);
         }
+
         let background_color = content.color(NamedColor::Background as usize);
         let display_offset = content.display_offset();
         let cursor = content.cursor();
