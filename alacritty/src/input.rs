@@ -29,7 +29,7 @@ use alacritty_terminal::term::{ClipboardType, SizeInfo, Term, TermMode};
 use alacritty_terminal::vi_mode::ViMotion;
 
 use crate::clipboard::Clipboard;
-use crate::config::{Action, BindingMode, Config, Key, SearchAction, ViAction};
+use crate::config::{Action, BindingMode, Config, Key, MouseAction, SearchAction, ViAction};
 use crate::daemon::start_daemon;
 use crate::display::hint::HintMatch;
 use crate::display::window::Window;
@@ -104,6 +104,7 @@ pub trait ActionContext<T: EventListener> {
     fn toggle_vi_mode(&mut self) {}
     fn hint_input(&mut self, _character: char) {}
     fn trigger_hint(&mut self, _hint: &HintMatch) {}
+    fn expand_selection(&mut self) {}
     fn paste(&mut self, _text: &str) {}
 }
 
@@ -231,6 +232,7 @@ impl<T: EventListener> Execute<T> for Action {
             Action::Search(SearchAction::SearchDeleteWord) => ctx.search_pop_word(),
             Action::Search(SearchAction::SearchHistoryPrevious) => ctx.search_history_previous(),
             Action::Search(SearchAction::SearchHistoryNext) => ctx.search_history_next(),
+            Action::Mouse(MouseAction::ExpandSelection) => ctx.expand_selection(),
             Action::SearchForward => ctx.start_search(Direction::Right),
             Action::SearchBackward => ctx.start_search(Direction::Left),
             Action::Copy => ctx.copy_selection(ClipboardType::Clipboard),
@@ -531,48 +533,9 @@ impl<T: EventListener, A: ActionContext<T>> Processor<T, A> {
             let display_offset = self.ctx.terminal().grid().display_offset();
             let point = self.ctx.mouse().point(&self.ctx.size_info(), display_offset);
 
-            match button {
-                MouseButton::Left => self.on_left_click(point),
-                MouseButton::Right => self.on_right_click(point),
-                // Do nothing when using buttons other than LMB.
-                _ => self.ctx.mouse_mut().click_state = ClickState::None,
+            if let MouseButton::Left = button {
+                self.on_left_click(point)
             }
-        }
-    }
-
-    /// Handle selection expansion on right click.
-    fn on_right_click(&mut self, point: Point) {
-        match self.ctx.mouse().click_state {
-            ClickState::Click => {
-                let selection_type = if self.ctx.modifiers().ctrl() {
-                    SelectionType::Block
-                } else {
-                    SelectionType::Simple
-                };
-
-                self.expand_selection(point, selection_type);
-            },
-            ClickState::DoubleClick => self.expand_selection(point, SelectionType::Semantic),
-            ClickState::TripleClick => self.expand_selection(point, SelectionType::Lines),
-            ClickState::None => (),
-        }
-    }
-
-    /// Expand existing selection.
-    fn expand_selection(&mut self, point: Point, selection_type: SelectionType) {
-        let cell_side = self.ctx.mouse().cell_side;
-
-        let selection = match &mut self.ctx.terminal_mut().selection {
-            Some(selection) => selection,
-            None => return,
-        };
-
-        selection.ty = selection_type;
-        self.ctx.update_selection(point, cell_side);
-
-        // Move vi mode cursor to mouse click position.
-        if self.ctx.terminal().mode().contains(TermMode::VI) && !self.ctx.search_active() {
-            self.ctx.terminal_mut().vi_mode_cursor.point = point;
         }
     }
 
@@ -749,8 +712,9 @@ impl<T: EventListener, A: ActionContext<T>> Processor<T, A> {
         } else {
             match state {
                 ElementState::Pressed => {
-                    self.process_mouse_bindings(button);
+                    // Process mouse press before bindings to update the `click_state`.
                     self.on_mouse_press(button);
+                    self.process_mouse_bindings(button);
                 },
                 ElementState::Released => self.on_mouse_release(button),
             }
@@ -1119,6 +1083,7 @@ mod tests {
             initial_button: $initial_button:expr,
             input: $input:expr,
             end_state: $end_state:expr,
+            end_button: $end_button:expr,
         } => {
             #[test]
             fn $name() {
@@ -1138,6 +1103,7 @@ mod tests {
 
                 let mut mouse = Mouse {
                     click_state: $initial_state,
+                    last_click_button: $initial_button,
                     ..Mouse::default()
                 };
 
@@ -1171,6 +1137,7 @@ mod tests {
                 };
 
                 assert_eq!(processor.ctx.mouse.click_state, $end_state);
+                assert_eq!(processor.ctx.mouse.last_click_button, $end_button);
             }
         }
     }
@@ -1208,6 +1175,7 @@ mod tests {
             window_id: unsafe { std::mem::transmute_copy(&0) },
         },
         end_state: ClickState::Click,
+        end_button: MouseButton::Left,
     }
 
     test_clickstate! {
@@ -1224,6 +1192,7 @@ mod tests {
             window_id: unsafe { std::mem::transmute_copy(&0) },
         },
         end_state: ClickState::Click,
+        end_button: MouseButton::Right,
     }
 
     test_clickstate! {
@@ -1239,7 +1208,8 @@ mod tests {
             },
             window_id: unsafe { std::mem::transmute_copy(&0) },
         },
-        end_state: ClickState::None,
+        end_state: ClickState::Click,
+        end_button: MouseButton::Middle,
     }
 
     test_clickstate! {
@@ -1256,6 +1226,24 @@ mod tests {
             window_id: unsafe { std::mem::transmute_copy(&0) },
         },
         end_state: ClickState::DoubleClick,
+        end_button: MouseButton::Left,
+    }
+
+    test_clickstate! {
+        name: double_click_right,
+        initial_state: ClickState::Click,
+        initial_button: MouseButton::Right,
+        input: GlutinEvent::WindowEvent {
+            event: WindowEvent::MouseInput {
+                state: ElementState::Pressed,
+                button: MouseButton::Right,
+                device_id: unsafe { std::mem::transmute_copy(&0) },
+                modifiers: ModifiersState::default(),
+            },
+            window_id: unsafe { std::mem::transmute_copy(&0) },
+        },
+        end_state: ClickState::DoubleClick,
+        end_button: MouseButton::Right,
     }
 
     test_clickstate! {
@@ -1272,6 +1260,24 @@ mod tests {
             window_id: unsafe { std::mem::transmute_copy(&0) },
         },
         end_state: ClickState::TripleClick,
+        end_button: MouseButton::Left,
+    }
+
+    test_clickstate! {
+        name: triple_click_middle,
+        initial_state: ClickState::DoubleClick,
+        initial_button: MouseButton::Middle,
+        input: GlutinEvent::WindowEvent {
+            event: WindowEvent::MouseInput {
+                state: ElementState::Pressed,
+                button: MouseButton::Middle,
+                device_id: unsafe { std::mem::transmute_copy(&0) },
+                modifiers: ModifiersState::default(),
+            },
+            window_id: unsafe { std::mem::transmute_copy(&0) },
+        },
+        end_state: ClickState::TripleClick,
+        end_button: MouseButton::Middle,
     }
 
     test_clickstate! {
@@ -1288,6 +1294,7 @@ mod tests {
             window_id: unsafe { std::mem::transmute_copy(&0) },
         },
         end_state: ClickState::Click,
+        end_button: MouseButton::Right,
     }
 
     test_process_binding! {

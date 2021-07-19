@@ -671,6 +671,42 @@ impl<'a, N: Notify + 'a, T: EventListener> input::ActionContext<T> for ActionCon
         }
     }
 
+    /// Expand the selection to the current mouse cursor position.
+    #[inline]
+    fn expand_selection(&mut self) {
+        let selection_type = match self.mouse().click_state {
+            ClickState::Click => {
+                if self.modifiers().ctrl() {
+                    SelectionType::Block
+                } else {
+                    SelectionType::Simple
+                }
+            },
+            ClickState::DoubleClick => SelectionType::Semantic,
+            ClickState::TripleClick => SelectionType::Lines,
+            ClickState::None => return,
+        };
+
+        // Load mouse point, treating message bar and padding as the closest cell.
+        let display_offset = self.terminal().grid().display_offset();
+        let point = self.mouse().point(&self.size_info(), display_offset);
+
+        let cell_side = self.mouse().cell_side;
+
+        let selection = match &mut self.terminal_mut().selection {
+            Some(selection) => selection,
+            None => return,
+        };
+
+        selection.ty = selection_type;
+        self.update_selection(point, cell_side);
+
+        // Move vi mode cursor to mouse click position.
+        if self.terminal().mode().contains(TermMode::VI) && !self.search_active() {
+            self.terminal_mut().vi_mode_cursor.point = point;
+        }
+    }
+
     /// Paste a text into the terminal.
     fn paste(&mut self, text: &str) {
         if self.search_active() {
