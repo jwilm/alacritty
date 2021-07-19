@@ -507,12 +507,12 @@
 #   - Right
 #   - Numeric identifier such as `5`
 #
-# - `action` (see key bindings for most of the action)
+# - `action` (see key bindings for actions not exclusive to mouse mode)
 #
 # - Mouse exclusive actions:
 #
 #   - ExpandSelection
-#       Expand the selection to the current mouse location
+#       Expand the selection to the current mouse cursor location.
 #
 # And optionally:
 #

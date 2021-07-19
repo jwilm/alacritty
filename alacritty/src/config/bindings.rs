@@ -109,7 +109,7 @@ pub enum Action {
     #[config(skip)]
     Search(SearchAction),
 
-    /// Perform mouse action.
+    /// Perform mouse binding exclusive action.
     #[config(skip)]
     Mouse(MouseAction),
 
@@ -294,11 +294,10 @@ pub enum SearchAction {
     SearchHistoryNext,
 }
 
-/// Mouse specific actions.
-#[allow(clippy::enum_variant_names)]
+/// Mouse binding specific actions.
 #[derive(ConfigDeserialize, Debug, Copy, Clone, PartialEq, Eq)]
 pub enum MouseAction {
-    /// Expand the selection to the current mouse position.
+    /// Expand the selection to the current mouse cursor position.
     ExpandSelection,
 }
 
@@ -1128,7 +1127,7 @@ impl<'a> Deserialize<'a> for RawBinding {
                     (Some(action @ Action::Mouse(_)), None, None) => {
                         if mouse.is_none() {
                             return Err(V::Error::custom(format!(
-                                "action `{}` is only available in mouse binding",
+                                "action `{}` is only available for mouse bindings",
                                 action,
                             )));
                         }
